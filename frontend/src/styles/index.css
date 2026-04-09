@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+@layer base {
+  body {
+    @apply bg-neutral-50 font-sans text-neutral-900 antialiased dark:bg-black dark:text-neutral-100;
+  }
+}
+
+@layer components {
+  .form-label {
+    @apply mb-1 block text-sm font-medium text-neutral-800 dark:text-neutral-200;
+  }
+  .form-input {
+    @apply w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:border-neutral-900 focus:outline-none focus:ring-1 focus:ring-neutral-900 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100 dark:placeholder-neutral-500 dark:focus:border-white dark:focus:ring-white;
+  }
+  .form-select {
+    @apply form-input appearance-none bg-white dark:bg-neutral-950;
+  }
+  .btn-primary {
+    @apply rounded-md border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-50 dark:border-white dark:bg-white dark:text-black dark:hover:bg-neutral-200;
+  }
+  .btn-secondary {
+    @apply rounded-md border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-900 transition hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-950 dark:text-neutral-100 dark:hover:bg-neutral-900;
+  }
+}
+
+.PhoneInputInput {
+  @apply w-full border-0 bg-transparent py-1 text-sm text-neutral-900 outline-none dark:text-neutral-100;
+}
+
+.PhoneInputCountryIcon {
+  @apply opacity-90;
+}
