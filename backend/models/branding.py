@@ -1,4 +1,4 @@
-from sqlalchemy import Integer, String
+from sqlalchemy import Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.base import Base
@@ -12,3 +12,11 @@ class AppBranding(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     project_name: Mapped[str] = mapped_column(String(255), default="Sales Follow-up Console")
     logo_filename: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    favicon_filename: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    support_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    mail_smtp_host: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    mail_smtp_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    mail_smtp_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    mail_smtp_password: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reset_email_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    reset_email_body: Mapped[str | None] = mapped_column(Text, nullable=True)

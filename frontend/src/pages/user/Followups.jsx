@@ -98,6 +98,12 @@ export default function Followups() {
       });
       toast.success("Follow-up scheduled; draft generated when possible");
       await loadFollowups();
+      try {
+        const l = await userService.listLeads(undefined, { page: 1, limit: 500 });
+        setLeads(l.items ?? []);
+      } catch {
+        /* ignore */
+      }
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -146,6 +152,15 @@ export default function Followups() {
       render: (r) => (
         <span className="line-clamp-2 max-w-md text-neutral-600 dark:text-neutral-400">
           {r.last_message || "—"}
+        </span>
+      ),
+    },
+    {
+      key: "failure_reason",
+      label: "If AI failed",
+      render: (r) => (
+        <span className="max-w-xs text-xs text-red-700 dark:text-red-400">
+          {r.failure_reason || "—"}
         </span>
       ),
     },

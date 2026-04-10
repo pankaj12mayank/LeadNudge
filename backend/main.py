@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from api import admin, auth, followups, leads, public, settings as settings_router
+from api import account, admin, auth, followups, leads, public, settings as settings_router
 from core.config import settings
 from core.paths import STATIC_ROOT, UPLOAD_DIR
 from core.security import hash_password
@@ -53,6 +53,7 @@ app.mount(
 )
 app.include_router(public.router)
 app.include_router(auth.router)
+app.include_router(account.router)
 app.include_router(admin.router)
 app.include_router(leads.router)
 app.include_router(followups.router)

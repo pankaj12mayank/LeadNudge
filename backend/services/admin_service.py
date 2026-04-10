@@ -1,6 +1,7 @@
 from typing import Literal
 
 from fastapi import HTTPException, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from core.security import hash_password
@@ -10,7 +11,7 @@ from models.user import User
 from models.workspace import Workspace
 from schemas.pagination import PaginationParams
 from schemas.settings import AdminSettingsUpdate
-from schemas.user import UserCreate
+from schemas.user import UserAdminPatch, UserCreate
 from schemas.workspace import WorkspacePlanUpdate
 
 # AI message caps by plan (workspace-level); shown in admin UI as Free vs Paid (Pro)
@@ -93,10 +94,19 @@ def list_users(
     *,
     page: int,
     limit: int,
+    search: str | None = None,
 ) -> tuple[list[User], int]:
     q = db.query(User)
     if workspace_id is not None:
         q = q.filter(User.workspace_id == workspace_id)
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        q = q.filter(
+            or_(
+                User.email.ilike(term),
+                User.display_name.ilike(term),
+            )
+        )
     total = q.count()
     page = PaginationParams.clamp_page(page)
     limit = PaginationParams.clamp_limit(limit)
@@ -149,3 +159,24 @@ def update_admin_settings(db: Session, data: AdminSettingsUpdate) -> WorkspaceSe
     db.commit()
     db.refresh(row)
     return row
+
+
+def delete_user(db: Session, user_id: int) -> None:
+    u = db.get(User, user_id)
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+    db.delete(u)
+    db.commit()
+
+
+def patch_user(db: Session, user_id: int, data: UserAdminPatch) -> User:
+    u = db.get(User, user_id)
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+    if data.is_active is not None:
+        u.is_active = data.is_active
+    if data.display_name is not None:
+        u.display_name = data.display_name.strip() or None
+    db.commit()
+    db.refresh(u)
+    return u

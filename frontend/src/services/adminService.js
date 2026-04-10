@@ -17,10 +17,42 @@ export async function createUser(payload) {
   return data;
 }
 
-export async function listUsers(workspaceId, { page = 1, limit = 50 } = {}) {
+export async function listUsers(
+  workspaceId,
+  { page = 1, limit = 50, q } = {},
+) {
   const params = { page, limit };
   if (workspaceId != null) params.workspace_id = workspaceId;
+  if (q) params.q = q;
   const { data } = await api.get("/admin/users", { params });
+  return data;
+}
+
+export async function patchUser(userId, payload) {
+  const { data } = await api.patch(`/admin/users/${userId}`, payload);
+  return data;
+}
+
+export async function deleteUser(userId) {
+  await api.delete(`/admin/users/${userId}`);
+}
+
+export async function getSystemStatus() {
+  const { data } = await api.get("/admin/system-status");
+  return data;
+}
+
+export async function getAdminActivity(limit = 20) {
+  const { data } = await api.get("/admin/activity", {
+    params: { limit },
+  });
+  return data;
+}
+
+export async function getUsageUsers({ workspaceId, page = 1, limit = 50 } = {}) {
+  const params = { page, limit };
+  if (workspaceId != null) params.workspace_id = workspaceId;
+  const { data } = await api.get("/admin/usage/users", { params });
   return data;
 }
 
@@ -65,4 +97,25 @@ export async function postAdminLogo(file) {
   body.append("file", file);
   const { data } = await api.post("/admin/branding/logo", body);
   return data;
+}
+
+export async function postAdminFavicon(file) {
+  const body = new FormData();
+  body.append("file", file);
+  const { data } = await api.post("/admin/branding/favicon", body);
+  return data;
+}
+
+export async function getBrandingMail() {
+  const { data } = await api.get("/admin/branding/mail");
+  return data;
+}
+
+export async function putBrandingMail(payload) {
+  const { data } = await api.put("/admin/branding/mail", payload);
+  return data;
+}
+
+export async function postBrandingMailTest(toEmail) {
+  await api.post("/admin/branding/mail/test", { to_email: toEmail });
 }

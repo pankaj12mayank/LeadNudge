@@ -15,6 +15,7 @@ class FollowupOut(BaseModel):
     scheduled_at: datetime
     status: str
     last_message: str | None = None
+    failure_reason: str | None = None
 
     model_config = {"from_attributes": True}
 

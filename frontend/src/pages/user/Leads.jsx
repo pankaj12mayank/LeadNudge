@@ -8,6 +8,14 @@ import Badge from "../../components/Badge";
 import PaginationBar from "../../components/PaginationBar";
 import * as userService from "../../services/userService";
 
+const STATUS_OPTIONS = [
+  { value: "new", label: "New" },
+  { value: "contacted", label: "Contacted" },
+  { value: "interested", label: "Interested" },
+  { value: "not_interested", label: "Not interested" },
+  { value: "closed", label: "Closed" },
+];
+
 const emptyForm = {
   name: "",
   email: "",
@@ -40,6 +48,9 @@ export default function Leads() {
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
   const [listLoading, setListLoading] = useState(false);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQ, setSearchQ] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
 
   function applyListPayload(data) {
     setRows(data.items ?? []);
@@ -53,7 +64,11 @@ export default function Leads() {
       setLoading(true);
       setListLoading(true);
       try {
-        const data = await userService.listLeads(undefined, { page, limit });
+        const data = await userService.listLeads(undefined, {
+          page,
+          limit,
+          q: searchQ || undefined,
+        });
         if (!cancelled) applyListPayload(data);
       } catch (e) {
         if (!cancelled) toast.error(e.message);
@@ -67,7 +82,7 @@ export default function Leads() {
     return () => {
       cancelled = true;
     };
-  }, [page, limit]);
+  }, [page, limit, searchQ]);
 
   async function onCreate(e) {
     e.preventDefault();
@@ -92,8 +107,13 @@ export default function Leads() {
         country_code: ph.country_code,
       });
       setForm(emptyForm);
+      setAddOpen(false);
       toast.success("Lead added successfully");
-      const data = await userService.listLeads(undefined, { page, limit });
+      const data = await userService.listLeads(undefined, {
+        page,
+        limit,
+        q: searchQ || undefined,
+      });
       applyListPayload(data);
     } catch (err) {
       toast.error(err.message);
@@ -122,7 +142,11 @@ export default function Leads() {
       });
       setEditing(null);
       toast.success("Lead updated");
-      const data = await userService.listLeads(undefined, { page, limit });
+      const data = await userService.listLeads(undefined, {
+        page,
+        limit,
+        q: searchQ || undefined,
+      });
       applyListPayload(data);
     } catch (err) {
       toast.error(err.message);
@@ -136,7 +160,11 @@ export default function Leads() {
     try {
       await userService.deleteLead(id);
       toast.success("Lead deleted");
-      const data = await userService.listLeads(undefined, { page, limit });
+      const data = await userService.listLeads(undefined, {
+        page,
+        limit,
+        q: searchQ || undefined,
+      });
       applyListPayload(data);
     } catch (err) {
       toast.error(err.message);
@@ -161,7 +189,11 @@ export default function Leads() {
       if (r.errors?.length) {
         toast.warning(r.errors.slice(0, 3).join(" · "));
       }
-      const data = await userService.listLeads(undefined, { page, limit });
+      const data = await userService.listLeads(undefined, {
+        page,
+        limit,
+        q: searchQ || undefined,
+      });
       applyListPayload(data);
     } catch (err) {
       toast.error(err.message);
@@ -234,13 +266,22 @@ export default function Leads() {
 
   return (
     <div className="space-y-8 p-4 lg:p-8">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
-          Leads
-        </h1>
-        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-          Manage leads in your workspace. Import a CSV or add rows manually.
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
+            Leads
+          </h1>
+          <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+            Import a CSV or add contacts one at a time. Search and edit anytime.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="btn-primary w-full shrink-0 sm:w-auto"
+          onClick={() => setAddOpen(true)}
+        >
+          Add lead
+        </button>
       </div>
 
       <Card title="Import CSV">
@@ -271,159 +312,266 @@ export default function Leads() {
         </div>
       </Card>
 
-      <Card title="Add lead">
-        <form
-          onSubmit={onCreate}
-          className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+      {addOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="add-lead-title"
         >
-          <div>
-            <label className="form-label">Name</label>
-            <input
-              className="form-input"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              disabled={saving}
-              required
-            />
-          </div>
-          <div>
-            <label className="form-label">Email</label>
-            <input
-              type="email"
-              className="form-input"
-              value={form.email}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, email: e.target.value }))
-              }
-              disabled={saving}
-              required
-            />
-          </div>
-          <div className="sm:col-span-2 lg:col-span-3">
-            <label className="form-label">Phone</label>
-            <div className="phone-input-wrap rounded-md border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-600 dark:bg-neutral-950">
-              <PhoneInput
-                international
-                defaultCountry="US"
-                value={form.phoneE164 || undefined}
-                onChange={(v) =>
-                  setForm((f) => ({ ...f, phoneE164: v || "" }))
-                }
-                disabled={saving}
-                className="phone-input"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="form-label">Status</label>
-            <input
-              className="form-input"
-              value={form.status}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, status: e.target.value }))
-              }
-              disabled={saving}
-            />
-          </div>
-          <div>
-            <label className="form-label">Tag</label>
-            <input
-              className="form-input"
-              value={form.tag}
-              onChange={(e) => setForm((f) => ({ ...f, tag: e.target.value }))}
-              disabled={saving}
-            />
-          </div>
-          <div className="sm:col-span-2 lg:col-span-3">
-            <button type="submit" disabled={saving} className="btn-primary">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            aria-label="Close"
+            onClick={() => !saving && setAddOpen(false)}
+          />
+          <div className="relative z-10 w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl border border-neutral-200 bg-white p-4 shadow-xl dark:border-neutral-700 dark:bg-neutral-900 sm:p-6">
+            <h2
+              id="add-lead-title"
+              className="text-lg font-semibold text-neutral-900 dark:text-neutral-100"
+            >
               Add lead
-            </button>
-          </div>
-        </form>
-      </Card>
-
-      {editing && (
-        <Card title="Edit lead">
-          <form onSubmit={onUpdate} className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="form-label">Name</label>
-              <input
-                className="form-input"
-                value={editing.name}
-                onChange={(e) =>
-                  setEditing((x) => ({ ...x, name: e.target.value }))
-                }
-                required
-              />
-            </div>
-            <div>
-              <label className="form-label">Email</label>
-              <input
-                type="email"
-                className="form-input"
-                value={editing.email}
-                onChange={(e) =>
-                  setEditing((x) => ({ ...x, email: e.target.value }))
-                }
-                required
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="form-label">Phone</label>
-              <div className="phone-input-wrap rounded-md border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-600 dark:bg-neutral-950">
-                <PhoneInput
-                  international
-                  defaultCountry="US"
-                  value={editing.phoneE164 || undefined}
-                  onChange={(v) =>
-                    setEditing((x) => ({ ...x, phoneE164: v || "" }))
+            </h2>
+            <form
+              onSubmit={onCreate}
+              className="mt-4 grid gap-4 sm:grid-cols-2"
+            >
+              <div>
+                <label className="form-label">Name</label>
+                <input
+                  className="form-input"
+                  value={form.name}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, name: e.target.value }))
+                  }
+                  disabled={saving}
+                  required
+                />
+              </div>
+              <div>
+                <label className="form-label">Email</label>
+                <input
+                  type="email"
+                  className="form-input"
+                  value={form.email}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, email: e.target.value }))
+                  }
+                  disabled={saving}
+                  required
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="form-label">Phone</label>
+                <div className="phone-input-wrap rounded-md border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-600 dark:bg-neutral-950">
+                  <PhoneInput
+                    international
+                    defaultCountry="US"
+                    value={form.phoneE164 || undefined}
+                    onChange={(v) =>
+                      setForm((f) => ({ ...f, phoneE164: v || "" }))
+                    }
+                    disabled={saving}
+                    className="phone-input"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="form-label">Status</label>
+                <select
+                  className="form-input"
+                  value={form.status}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, status: e.target.value }))
+                  }
+                  disabled={saving}
+                >
+                  {STATUS_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="form-label">Tag</label>
+                <input
+                  className="form-input"
+                  value={form.tag}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, tag: e.target.value }))
                   }
                   disabled={saving}
                 />
               </div>
-            </div>
-            <div>
-              <label className="form-label">Status</label>
-              <input
-                className="form-input"
-                value={editing.status}
-                onChange={(e) =>
-                  setEditing((x) => ({ ...x, status: e.target.value }))
-                }
-              />
-            </div>
-            <div>
-              <label className="form-label">Tag</label>
-              <input
-                className="form-input"
-                value={editing.tag}
-                onChange={(e) =>
-                  setEditing((x) => ({ ...x, tag: e.target.value }))
-                }
-              />
-            </div>
-            <div className="flex gap-2 sm:col-span-2">
-              <button type="submit" disabled={saving} className="btn-primary">
-                Save
-              </button>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => setEditing(null)}
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        </Card>
+              <div className="flex flex-col gap-2 sm:col-span-2 sm:flex-row">
+                <button type="submit" disabled={saving} className="btn-primary w-full sm:w-auto">
+                  Save lead
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary w-full sm:w-auto"
+                  disabled={saving}
+                  onClick={() => setAddOpen(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {editing && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-lead-title"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            aria-label="Close"
+            onClick={() => !saving && setEditing(null)}
+          />
+          <div className="relative z-10 w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl border border-neutral-200 bg-white p-4 shadow-xl dark:border-neutral-700 dark:bg-neutral-900 sm:p-6">
+            <h2
+              id="edit-lead-title"
+              className="text-lg font-semibold text-neutral-900 dark:text-neutral-100"
+            >
+              Edit lead
+            </h2>
+            <form onSubmit={onUpdate} className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="form-label">Name</label>
+                <input
+                  className="form-input"
+                  value={editing.name}
+                  onChange={(e) =>
+                    setEditing((x) => ({ ...x, name: e.target.value }))
+                  }
+                  required
+                />
+              </div>
+              <div>
+                <label className="form-label">Email</label>
+                <input
+                  type="email"
+                  className="form-input"
+                  value={editing.email}
+                  onChange={(e) =>
+                    setEditing((x) => ({ ...x, email: e.target.value }))
+                  }
+                  required
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="form-label">Phone</label>
+                <div className="phone-input-wrap rounded-md border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-600 dark:bg-neutral-950">
+                  <PhoneInput
+                    international
+                    defaultCountry="US"
+                    value={editing.phoneE164 || undefined}
+                    onChange={(v) =>
+                      setEditing((x) => ({ ...x, phoneE164: v || "" }))
+                    }
+                    disabled={saving}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="form-label">Status</label>
+                <select
+                  className="form-input"
+                  value={editing.status || "new"}
+                  onChange={(e) =>
+                    setEditing((x) => ({ ...x, status: e.target.value }))
+                  }
+                >
+                  {STATUS_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="form-label">Tag</label>
+                <input
+                  className="form-input"
+                  value={editing.tag}
+                  onChange={(e) =>
+                    setEditing((x) => ({ ...x, tag: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="flex flex-col gap-2 sm:col-span-2 sm:flex-row">
+                <button type="submit" disabled={saving} className="btn-primary w-full sm:w-auto">
+                  Save
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary w-full sm:w-auto"
+                  onClick={() => setEditing(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       <Card title="Your leads">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end">
+          <div className="min-w-0 flex-1">
+            <label className="form-label">Search</label>
+            <input
+              className="form-input w-full"
+              placeholder="Name or email"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  setPage(1);
+                  setSearchQ(searchInput.trim());
+                }
+              }}
+            />
+          </div>
+          <div className="flex w-full gap-2 sm:w-auto">
+            <button
+              type="button"
+              className="btn-primary w-full sm:w-auto"
+              onClick={() => {
+                setPage(1);
+                setSearchQ(searchInput.trim());
+              }}
+            >
+              Search
+            </button>
+            <button
+              type="button"
+              className="btn-secondary w-full sm:w-auto"
+              onClick={() => {
+                setSearchInput("");
+                setSearchQ("");
+                setPage(1);
+              }}
+            >
+              Clear
+            </button>
+          </div>
+        </div>
         {loading ? (
           <p className="text-neutral-500 dark:text-neutral-400">Loading…</p>
         ) : (
           <>
-            <Table columns={columns} rows={rows} emptyText="No leads yet" />
+            <div className="overflow-x-auto">
+              <Table columns={columns} rows={rows} emptyText="No leads yet" />
+            </div>
             <PaginationBar
               page={page}
               pages={pages}

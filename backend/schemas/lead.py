@@ -5,6 +5,10 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from core.validation import is_valid_phone, normalize_country_code
 
+ALLOWED_LEAD_STATUSES = frozenset(
+    {"new", "contacted", "interested", "not_interested", "closed"}
+)
+
 
 class LeadCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
@@ -25,6 +29,13 @@ class LeadCreate(BaseModel):
     @classmethod
     def country_ok(cls, v: str | None) -> str | None:
         return normalize_country_code(v)
+
+    @field_validator("status")
+    @classmethod
+    def status_ok(cls, v: str) -> str:
+        if v not in ALLOWED_LEAD_STATUSES:
+            raise ValueError(f"Status must be one of: {', '.join(sorted(ALLOWED_LEAD_STATUSES))}")
+        return v
 
 
 class LeadUpdate(BaseModel):
@@ -48,6 +59,15 @@ class LeadUpdate(BaseModel):
     @classmethod
     def country_ok(cls, v: str | None) -> str | None:
         return normalize_country_code(v)
+
+    @field_validator("status")
+    @classmethod
+    def status_ok(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if v not in ALLOWED_LEAD_STATUSES:
+            raise ValueError(f"Status must be one of: {', '.join(sorted(ALLOWED_LEAD_STATUSES))}")
+        return v
 
 
 class LeadOut(BaseModel):

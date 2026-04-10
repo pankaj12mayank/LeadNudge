@@ -31,7 +31,7 @@ def list_followups(
     db: Annotated[Session, Depends(get_db)],
     workspace_id: int | None = Query(default=None),
     page: int = Query(default=1, ge=1),
-    limit: int = Query(default=50, ge=1, le=100),
+    limit: int = Query(default=50, ge=1, le=500),
 ) -> PaginatedFollowups:
     if principal.role == "user" and workspace_id is not None:
         raise HTTPException(
@@ -53,6 +53,7 @@ def list_followups(
                 scheduled_at=fu.scheduled_at,
                 status=fu.status,
                 last_message=last_msg,
+                failure_reason=fu.failure_reason,
             )
         )
     pages = max(1, ceil(total / limit)) if limit else 1
@@ -84,6 +85,7 @@ def create_followup(
             scheduled_at=fu.scheduled_at,
             status=fu.status,
             last_message=msg.content if msg else None,
+            failure_reason=fu.failure_reason,
         ),
         message=MessageOut.model_validate(msg) if msg else None,
     )

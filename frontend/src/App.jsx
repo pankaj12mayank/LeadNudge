@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Navigate,
   Outlet,
@@ -7,10 +7,12 @@ import {
   useLocation,
 } from "react-router-dom";
 import Navbar from "./components/Navbar";
-import Sidebar, { MobileNav } from "./components/Sidebar";
+import Sidebar, { MobileNav, SidebarExpandButton } from "./components/Sidebar";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { useSite } from "./context/SiteContext";
 import Login from "./pages/auth/Login";
+import ForgotPassword from "./pages/auth/ForgotPassword";
+import ResetPassword from "./pages/auth/ResetPassword";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminAccount from "./pages/admin/AdminAccount";
 import Workspaces from "./pages/admin/Workspaces";
@@ -21,8 +23,9 @@ import Dashboard from "./pages/user/Dashboard";
 import Leads from "./pages/user/Leads";
 import Followups from "./pages/user/Followups";
 import EmailSettings from "./pages/user/EmailSettings";
+import Profile from "./pages/user/Profile";
 
-const TITLES = {
+const NAV_TITLES = {
   "/admin/dashboard": "Overview",
   "/admin/workspaces": "Workspaces",
   "/admin/users": "Team users",
@@ -33,30 +36,49 @@ const TITLES = {
   "/leads": "Leads",
   "/followups": "Follow-ups",
   "/email-settings": "Email (SMTP)",
+  "/profile": "Profile",
 };
+
+const SIDEBAR_KEY = "ais_sidebar_collapsed";
 
 function Shell({ variant }) {
   const { pathname } = useLocation();
   const { site } = useSite();
-  const title =
-    TITLES[pathname] || (variant === "admin" ? "Admin" : "Workspace");
+  const navTitle =
+    NAV_TITLES[pathname] || (variant === "admin" ? "Admin" : "Workspace");
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => localStorage.getItem(SIDEBAR_KEY) === "1",
+  );
+
+  useEffect(() => {
+    localStorage.setItem(SIDEBAR_KEY, sidebarCollapsed ? "1" : "0");
+  }, [sidebarCollapsed]);
+
   const projectName = site?.project_name;
   const logoUrl = site?.logo_url;
+  const supportEmail = site?.support_email;
 
   return (
-    <div className="flex min-h-screen bg-neutral-50 dark:bg-black">
+    <div className="flex min-h-screen w-full bg-neutral-50 dark:bg-black">
       <Sidebar
         variant={variant}
         projectName={projectName}
         logoUrl={logoUrl}
+        supportEmail={supportEmail}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
       />
+      {sidebarCollapsed ? (
+        <SidebarExpandButton onClick={() => setSidebarCollapsed(false)} />
+      ) : null}
       <MobileNav
         variant={variant}
         open={mobileOpen}
         onClose={() => setMobileOpen(false)}
         projectName={projectName}
         logoUrl={logoUrl}
+        supportEmail={supportEmail}
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-2 border-b border-neutral-200 bg-white px-2 dark:border-neutral-800 dark:bg-neutral-950 lg:hidden">
@@ -81,7 +103,7 @@ function Shell({ variant }) {
             </svg>
           </button>
         </div>
-        <Navbar title={title} />
+        <Navbar title={navTitle} />
         <main className="flex-1 overflow-auto">
           <Outlet />
         </main>
@@ -94,6 +116,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
 
       <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
         <Route element={<Shell variant="admin" />}>
@@ -112,6 +136,7 @@ export default function App() {
           <Route path="/leads" element={<Leads />} />
           <Route path="/followups" element={<Followups />} />
           <Route path="/email-settings" element={<EmailSettings />} />
+          <Route path="/profile" element={<Profile />} />
         </Route>
       </Route>
 

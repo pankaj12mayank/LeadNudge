@@ -2,7 +2,12 @@ import { useCallback, useId, useState } from "react";
 
 const ACCEPT = ".png,.jpg,.jpeg,.svg,.webp";
 
-export default function LogoUploadZone({ disabled, onFile, hint }) {
+export default function LogoUploadZone({
+  disabled,
+  onFile,
+  hint,
+  label = "Logo",
+}) {
   const id = useId();
   const [dragOver, setDragOver] = useState(false);
   const [lastName, setLastName] = useState("");
@@ -18,7 +23,7 @@ export default function LogoUploadZone({ disabled, onFile, hint }) {
 
   return (
     <div>
-      <span className="form-label">Logo</span>
+      <span className="form-label">{label}</span>
       <div
         className={`mt-1 rounded-lg border-2 border-dashed px-4 py-8 text-center transition ${
           dragOver

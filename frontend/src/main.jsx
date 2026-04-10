@@ -6,6 +6,7 @@ import { AuthProvider } from "./context/AuthContext";
 import { SiteProvider } from "./context/SiteContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import App from "./App.jsx";
+import AuthLogoutLayer from "./components/AuthLogoutLayer.jsx";
 import "./styles/index.css";
 
 createRoot(document.getElementById("root")).render(
@@ -15,6 +16,7 @@ createRoot(document.getElementById("root")).render(
         <SiteProvider>
           <AuthProvider>
             <App />
+            <AuthLogoutLayer />
             <Toaster richColors closeButton position="top-center" />
           </AuthProvider>
         </SiteProvider>

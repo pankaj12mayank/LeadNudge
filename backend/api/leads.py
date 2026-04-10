@@ -38,8 +38,9 @@ def list_leads(
     principal: Annotated[Principal, Depends(get_principal)],
     db: Annotated[Session, Depends(get_db)],
     workspace_id: int | None = Query(default=None),
+    q: str | None = Query(default=None, max_length=200),
     page: int = Query(default=1, ge=1),
-    limit: int = Query(default=50, ge=1, le=100),
+    limit: int = Query(default=50, ge=1, le=500),
 ) -> PaginatedLeads:
     if principal.role == "user" and workspace_id is not None:
         raise HTTPException(
@@ -53,6 +54,7 @@ def list_leads(
         is_admin=principal.role == "admin",
         page=page,
         limit=limit,
+        search=q,
     )
     return PaginatedLeads.from_page(
         [LeadOut.model_validate(x) for x in rows],

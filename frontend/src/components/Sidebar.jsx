@@ -15,6 +15,7 @@ const userLinks = [
   { to: "/leads", label: "Leads" },
   { to: "/followups", label: "Follow-ups" },
   { to: "/email-settings", label: "Email (SMTP)" },
+  { to: "/profile", label: "Profile" },
 ];
 
 function linkClass({ isActive }) {
@@ -25,14 +26,33 @@ function linkClass({ isActive }) {
   }`;
 }
 
-export default function Sidebar({ variant, projectName, logoUrl }) {
+function brandInitials(name) {
+  const t = (name || "").trim();
+  if (!t) return "SF";
+  const parts = t.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+export default function Sidebar({
+  variant,
+  projectName,
+  logoUrl,
+  supportEmail,
+  collapsed,
+  onToggleCollapse,
+}) {
   const links = variant === "admin" ? adminLinks : userLinks;
   const home = variant === "admin" ? "/admin/dashboard" : "/dashboard";
   const displayName = projectName || "Sales Follow-up Console";
   const imgSrc = mediaUrl(logoUrl);
 
   return (
-    <aside className="hidden w-60 shrink-0 border-r border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950 lg:block">
+    <aside
+      className={`relative hidden shrink-0 border-r border-neutral-200 bg-white transition-[width] duration-200 dark:border-neutral-800 dark:bg-neutral-950 lg:flex lg:flex-col ${
+        collapsed ? "w-0 overflow-hidden border-r-0" : "w-60"
+      }`}
+    >
       <div className="flex min-h-14 flex-col gap-2 border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
         <NavLink
           to={home}
@@ -46,24 +66,46 @@ export default function Sidebar({ variant, projectName, logoUrl }) {
             />
           ) : (
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded border border-neutral-300 text-xs font-bold dark:border-neutral-600">
-              SF
+              {brandInitials(displayName)}
             </span>
           )}
           <span className="line-clamp-2 text-sm leading-tight">{displayName}</span>
         </NavLink>
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          className="hidden text-left text-xs font-medium text-neutral-500 underline decoration-neutral-400 underline-offset-2 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200 lg:block"
+        >
+          {collapsed ? "" : "Collapse sidebar"}
+        </button>
       </div>
-      <nav className="space-y-0.5 p-3">
+      <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
         {links.map((l) => (
           <NavLink key={l.to} to={l.to} className={linkClass} end={l.to === home}>
             {l.label}
           </NavLink>
         ))}
+        {variant === "user" && supportEmail ? (
+          <a
+            href={`mailto:${supportEmail}`}
+            className="block rounded-md px-3 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-900"
+          >
+            Support
+          </a>
+        ) : null}
       </nav>
     </aside>
   );
 }
 
-export function MobileNav({ variant, open, onClose, projectName, logoUrl }) {
+export function MobileNav({
+  variant,
+  open,
+  onClose,
+  projectName,
+  logoUrl,
+  supportEmail,
+}) {
   const links = variant === "admin" ? adminLinks : userLinks;
   const home = variant === "admin" ? "/admin/dashboard" : "/dashboard";
   const displayName = projectName || "Sales Follow-up Console";
@@ -79,7 +121,7 @@ export function MobileNav({ variant, open, onClose, projectName, logoUrl }) {
         aria-label="Close menu"
         onClick={onClose}
       />
-      <div className="absolute left-0 top-0 flex h-full w-64 flex-col border-r border-neutral-200 bg-white shadow-xl dark:border-neutral-800 dark:bg-neutral-950">
+      <div className="absolute left-0 top-0 flex h-full w-[min(100%,20rem)] flex-col border-r border-neutral-200 bg-white shadow-xl dark:border-neutral-800 dark:bg-neutral-950">
         <div className="flex items-center gap-2 border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
           {imgSrc ? (
             <img
@@ -87,7 +129,11 @@ export function MobileNav({ variant, open, onClose, projectName, logoUrl }) {
               alt=""
               className="h-8 w-8 rounded object-contain grayscale contrast-125 dark:invert"
             />
-          ) : null}
+          ) : (
+            <span className="flex h-8 w-8 items-center justify-center rounded border border-neutral-300 text-xs font-bold dark:border-neutral-600">
+              {brandInitials(displayName)}
+            </span>
+          )}
           <NavLink
             to={home}
             className="font-semibold text-neutral-900 dark:text-neutral-100"
@@ -96,7 +142,7 @@ export function MobileNav({ variant, open, onClose, projectName, logoUrl }) {
             {displayName}
           </NavLink>
         </div>
-        <nav className="space-y-0.5 p-3">
+        <nav className="space-y-0.5 overflow-y-auto p-3">
           {links.map((l) => (
             <NavLink
               key={l.to}
@@ -108,8 +154,30 @@ export function MobileNav({ variant, open, onClose, projectName, logoUrl }) {
               {l.label}
             </NavLink>
           ))}
+          {variant === "user" && supportEmail ? (
+            <a
+              href={`mailto:${supportEmail}`}
+              className="block rounded-md px-3 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-900"
+              onClick={onClose}
+            >
+              Support
+            </a>
+          ) : null}
         </nav>
       </div>
     </div>
+  );
+}
+
+export function SidebarExpandButton({ onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="btn-secondary fixed left-2 top-16 z-30 hidden px-2 py-1 text-xs lg:block"
+      aria-label="Open sidebar"
+    >
+      Menu
+    </button>
   );
 }

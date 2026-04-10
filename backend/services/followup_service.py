@@ -91,8 +91,9 @@ def create_followup(
                     email_service.send_followup_email(settings, lead, subj, body_plain)
             except Exception as e:
                 log.warning("Follow-up email not sent: %s", e)
-    except Exception:
+    except Exception as e:
         fu.status = "ai_failed"
+        fu.failure_reason = (str(e) or "AI error")[:500]
         db.commit()
         db.refresh(fu)
 

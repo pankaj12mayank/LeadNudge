@@ -3,7 +3,14 @@ from sqlalchemy.orm import Session
 
 from core.security import hash_password, verify_password
 from models.admin import Admin
-from schemas.admin_profile import AdminProfileUpdate, AdminPasswordUpdate
+from models.branding import AppBranding
+from schemas.admin_profile import (
+    AdminPasswordUpdate,
+    AdminProfileUpdate,
+    BrandingMailUpdate,
+)
+from services import branding_service
+from services.transactional_mail import mail_configured
 
 
 def get_admin(db: Session, admin_id: int) -> Admin:
@@ -38,3 +45,31 @@ def change_password(
         )
     admin.password = hash_password(data.new_password)
     db.commit()
+
+
+def apply_branding_mail_settings(db: Session, data: BrandingMailUpdate) -> AppBranding:
+    b = branding_service.get_or_create_branding(db)
+    if data.support_email is not None:
+        b.support_email = (data.support_email or "").strip() or None
+    if data.mail_smtp_host is not None:
+        b.mail_smtp_host = (data.mail_smtp_host or "").strip() or None
+    if data.mail_smtp_port is not None:
+        b.mail_smtp_port = data.mail_smtp_port
+    if data.mail_smtp_email is not None:
+        b.mail_smtp_email = (data.mail_smtp_email or "").strip() or None
+    if data.mail_smtp_password is not None:
+        b.mail_smtp_password = data.mail_smtp_password or None
+    if data.reset_email_subject is not None:
+        b.reset_email_subject = (data.reset_email_subject or "").strip() or None
+    if data.reset_email_body is not None:
+        b.reset_email_body = data.reset_email_body
+    partial = bool(b.mail_smtp_host or b.mail_smtp_email or b.mail_smtp_port)
+    if partial and not mail_configured(b):
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="SMTP requires host, port, and sender email together",
+        )
+    db.commit()
+    db.refresh(b)
+    return b

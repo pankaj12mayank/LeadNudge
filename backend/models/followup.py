@@ -13,5 +13,6 @@ class Followup(Base):
     lead_id: Mapped[int] = mapped_column(ForeignKey("leads.id"), index=True)
     scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(32), default="pending")
+    failure_reason: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     lead: Mapped["Lead"] = relationship("Lead", back_populates="followups")

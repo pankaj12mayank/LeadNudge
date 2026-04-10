@@ -4,6 +4,7 @@ import Card from "../../components/Card";
 import Table from "../../components/Table";
 import Badge from "../../components/Badge";
 import PaginationBar from "../../components/PaginationBar";
+import PasswordField from "../../components/PasswordField";
 import * as adminService from "../../services/adminService";
 import { workspaceLabel } from "../../utils/workspaceLabel";
 
@@ -20,6 +21,8 @@ export default function Users() {
     total: 0,
     pages: 1,
   });
+  const [searchQ, setSearchQ] = useState("");
+  const [appliedQ, setAppliedQ] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [plan, setPlan] = useState("free");
@@ -38,7 +41,11 @@ export default function Users() {
   async function loadUsers() {
     setListLoading(true);
     try {
-      const u = await adminService.listUsers(undefined, { page, limit });
+      const u = await adminService.listUsers(undefined, {
+        page,
+        limit,
+        q: appliedQ || undefined,
+      });
       setUsersRes({
         items: u.items ?? [],
         total: u.total ?? 0,
@@ -59,7 +66,11 @@ export default function Users() {
       try {
         const ws = await adminService.listWorkspaces();
         if (!c) setWorkspaces(ws);
-        const u = await adminService.listUsers(undefined, { page, limit });
+        const u = await adminService.listUsers(undefined, {
+          page,
+          limit,
+          q: appliedQ || undefined,
+        });
         if (!c) {
           setUsersRes({
             items: u.items ?? [],
@@ -79,7 +90,7 @@ export default function Users() {
     return () => {
       c = true;
     };
-  }, [page, limit]);
+  }, [page, limit, appliedQ]);
 
   async function onCreate(e) {
     e.preventDefault();
@@ -105,6 +116,27 @@ export default function Users() {
     }
   }
 
+  async function toggleActive(row) {
+    try {
+      await adminService.patchUser(row.id, { is_active: !row.is_active });
+      toast.success(row.is_active ? "User deactivated" : "User activated");
+      await loadUsers();
+    } catch (e) {
+      toast.error(e.message);
+    }
+  }
+
+  async function removeUser(row) {
+    if (!confirm(`Remove ${row.email}? This cannot be undone.`)) return;
+    try {
+      await adminService.deleteUser(row.id);
+      toast.success("User removed");
+      await loadUsers();
+    } catch (e) {
+      toast.error(e.message);
+    }
+  }
+
   const columns = [
     { key: "id", label: "ID" },
     { key: "email", label: "Email" },
@@ -127,29 +159,62 @@ export default function Users() {
         );
       },
     },
+    {
+      key: "is_active",
+      label: "Access",
+      render: (r) => (
+        <Badge variant={r.is_active ? "solid" : "outline"}>
+          {r.is_active ? "Active" : "Inactive"}
+        </Badge>
+      ),
+    },
+    {
+      key: "actions",
+      label: "",
+      render: (r) => (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="text-xs font-medium underline decoration-neutral-400 underline-offset-2"
+            onClick={() => toggleActive(r)}
+          >
+            {r.is_active ? "Deactivate" : "Activate"}
+          </button>
+          <button
+            type="button"
+            className="text-xs font-medium text-red-700 underline decoration-red-300 underline-offset-2 dark:text-red-400"
+            onClick={() => removeUser(r)}
+          >
+            Delete
+          </button>
+        </div>
+      ),
+    },
   ];
 
   return (
-    <div className="space-y-8 p-4 lg:p-8">
+    <div className="mx-auto w-full max-w-[1600px] space-y-8 p-4 lg:p-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
+        <p className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+          Access control
+        </p>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
           Team users
         </h1>
         <p className="mt-1 max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
-          There are exactly two workspaces: <strong>Free</strong> and <strong>Pro</strong>. When you
-          create a user, choose which plan workspace they join. They sign in on the same page as you
-          with their email and password.
+          Invite people to the Free or Pro workspace. You can deactivate access or
+          remove a user at any time.
         </p>
       </div>
 
-      <Card title="Invite workspace user">
+      <Card title="Invite user">
         <form onSubmit={onCreate} className="space-y-5">
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="form-label">User email</label>
               <input
                 type="email"
-                className="form-input"
+                className="form-input w-full"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={saving}
@@ -157,19 +222,15 @@ export default function Users() {
                 required
               />
             </div>
-            <div>
-              <label className="form-label">Initial password</label>
-              <input
-                type="password"
-                className="form-input"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={saving}
-                placeholder="Min 6 characters"
-                minLength={6}
-                required
-              />
-            </div>
+            <PasswordField
+              label="Initial password"
+              className="form-input w-full"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={saving}
+              autoComplete="new-password"
+              placeholder="Min 6 characters"
+            />
             <div className="sm:col-span-2">
               <span className="form-label">Workspace plan</span>
               <div className="mt-2 flex flex-wrap gap-4">
@@ -200,13 +261,40 @@ export default function Users() {
               </div>
             </div>
           </div>
-          <button type="submit" disabled={saving} className="btn-primary">
+          <button type="submit" disabled={saving} className="btn-primary w-full sm:w-auto">
             Create user
           </button>
         </form>
       </Card>
 
       <Card title="All users">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end">
+          <div className="min-w-0 flex-1">
+            <label className="form-label">Search</label>
+            <input
+              className="form-input w-full"
+              value={searchQ}
+              onChange={(e) => setSearchQ(e.target.value)}
+              placeholder="Email or name"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  setAppliedQ(searchQ.trim());
+                  setPage(1);
+                }
+              }}
+            />
+          </div>
+          <button
+            type="button"
+            className="btn-secondary w-full sm:w-auto"
+            onClick={() => {
+              setAppliedQ(searchQ.trim());
+              setPage(1);
+            }}
+          >
+            Search
+          </button>
+        </div>
         {loading ? (
           <p className="text-neutral-500 dark:text-neutral-400">Loading…</p>
         ) : (

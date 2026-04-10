@@ -1,8 +1,12 @@
 import api from "./api";
 
-export async function listLeads(workspaceId, { page = 1, limit = 50 } = {}) {
+export async function listLeads(
+  workspaceId,
+  { page = 1, limit = 50, q } = {},
+) {
   const params = { page, limit };
   if (workspaceId != null) params.workspace_id = workspaceId;
+  if (q) params.q = q;
   const { data } = await api.get("/leads", { params });
   return data;
 }
@@ -73,4 +77,18 @@ export async function updateSettings(payload, workspaceId) {
 export async function testSmtp() {
   const { data } = await api.post("/settings/smtp/test");
   return data;
+}
+
+export async function getAccount() {
+  const { data } = await api.get("/account");
+  return data;
+}
+
+export async function patchAccount(payload) {
+  const { data } = await api.patch("/account", payload);
+  return data;
+}
+
+export async function postAccountPassword(payload) {
+  await api.post("/account/password", payload);
 }

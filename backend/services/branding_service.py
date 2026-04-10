@@ -8,6 +8,7 @@ from core.config import settings
 from models.branding import AppBranding
 
 ALLOWED_EXT = {".png", ".jpg", ".jpeg", ".svg", ".webp"}
+ALLOWED_FAVICON_EXT = ALLOWED_EXT | {".ico"}
 MAX_BYTES = 2 * 1024 * 1024
 
 
@@ -36,6 +37,8 @@ def public_site_payload(db: Session) -> dict:
     return {
         "project_name": b.project_name,
         "logo_url": logo_public_path(b.logo_filename),
+        "favicon_url": logo_public_path(b.favicon_filename),
+        "support_email": b.support_email,
         "ollama_model": settings.ollama_model,
         "openai_chat_model": "gpt-4o-mini",
     }
@@ -70,6 +73,38 @@ async def save_logo_file(
     b = get_or_create_branding(db)
     old = b.logo_filename
     b.logo_filename = fname
+    db.commit()
+    db.refresh(b)
+    if old:
+        old_path = upload_dir / old
+        try:
+            old_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+    return b
+
+
+async def save_favicon_file(
+    db: Session, upload_dir: Path, file: UploadFile
+) -> AppBranding:
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file name")
+    suffix = Path(file.filename).suffix.lower()
+    if suffix not in ALLOWED_FAVICON_EXT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Allowed favicon types: {', '.join(sorted(ALLOWED_FAVICON_EXT))}",
+        )
+    data = await file.read()
+    if len(data) > MAX_BYTES:
+        raise HTTPException(status_code=400, detail="File too large (max 2MB)")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    fname = f"fav_{uuid4().hex}{suffix}"
+    path = upload_dir / fname
+    path.write_bytes(data)
+    b = get_or_create_branding(db)
+    old = b.favicon_filename
+    b.favicon_filename = fname
     db.commit()
     db.refresh(b)
     if old:

@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     )
     bootstrap_admin_email: str | None = None
     bootstrap_admin_password: str | None = None
+    frontend_base_url: str = Field(
+        default="http://localhost:5173",
+        validation_alias=AliasChoices("FRONTEND_URL", "frontend_base_url"),
+    )
 
     @field_validator("openai_api_key", mode="before")
     @classmethod

@@ -4,6 +4,7 @@ from typing import BinaryIO
 
 from fastapi import HTTPException, status
 from pydantic import EmailStr, TypeAdapter, ValidationError
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from core.validation import is_valid_phone, normalize_country_code
@@ -26,6 +27,7 @@ def list_leads(
     is_admin: bool,
     page: int,
     limit: int,
+    search: str | None = None,
 ) -> tuple[list[Lead], int]:
     q = db.query(Lead)
     if is_admin:
@@ -35,6 +37,11 @@ def list_leads(
         if workspace_id is None:
             return [], 0
         q = q.filter(Lead.workspace_id == workspace_id)
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        q = q.filter(
+            or_(Lead.name.ilike(term), Lead.email.ilike(term))
+        )
     total = q.count()
     page = PaginationParams.clamp_page(page)
     limit = PaginationParams.clamp_limit(limit)

@@ -1,4 +1,5 @@
 import axios from "axios";
+import { toast } from "sonner";
 import { API_BASE_URL, STORAGE_KEYS } from "../utils/constants";
 
 const api = axios.create({
@@ -29,6 +30,7 @@ api.interceptors.response.use(
     if (status === 401) {
       clearSession();
       if (!window.location.pathname.startsWith("/login")) {
+        toast.error("Your session expired. Please sign in again.");
         window.location.replace("/login");
       }
     }

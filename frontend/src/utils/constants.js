@@ -5,4 +5,5 @@ export const STORAGE_KEYS = {
   token: "ais_token",
   role: "ais_role",
   email: "ais_email",
+  displayName: "ais_display_name",
 };

@@ -11,18 +11,23 @@ export default function AdminDashboard() {
     followups: 0,
     workspaces: 0,
   });
+  const [status, setStatus] = useState(null);
+  const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [users, leads, followups, workspaces] = await Promise.all([
-          adminService.listUsers(undefined, { page: 1, limit: 1 }),
-          userService.listLeads(undefined, { page: 1, limit: 1 }),
-          userService.listFollowups(undefined, { page: 1, limit: 1 }),
-          adminService.listWorkspaces(),
-        ]);
+        const [users, leads, followups, workspaces, sys, act] =
+          await Promise.all([
+            adminService.listUsers(undefined, { page: 1, limit: 1 }),
+            userService.listLeads(undefined, { page: 1, limit: 1 }),
+            userService.listFollowups(undefined, { page: 1, limit: 1 }),
+            adminService.listWorkspaces(),
+            adminService.getSystemStatus(),
+            adminService.getAdminActivity(12),
+          ]);
         if (!cancelled) {
           setStats({
             users: users.total ?? 0,
@@ -30,6 +35,8 @@ export default function AdminDashboard() {
             followups: followups.total ?? 0,
             workspaces: workspaces.length,
           });
+          setStatus(sys);
+          setActivity(act || []);
         }
       } catch (e) {
         if (!cancelled) toast.error(e.message);
@@ -49,34 +56,110 @@ export default function AdminDashboard() {
     { label: "Follow-ups", value: stats.followups },
   ];
 
+  const lastAct = status?.last_activity_at
+    ? new Date(status.last_activity_at).toLocaleString()
+    : "—";
+
   return (
-    <div className="space-y-8 p-4 lg:p-8">
+    <div className="mx-auto w-full max-w-[1600px] space-y-8 p-4 lg:p-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
-          Overview
+        <p className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+          Admin home
+        </p>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
+          Workspace overview
         </h1>
-        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-          Cross-workspace totals. Open <strong>Team users</strong> or{" "}
-          <strong>Workspaces</strong> to manage access.
+        <p className="mt-1 max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+          High-level counts, system health, and the latest AI draft activity across
+          all workspaces.
         </p>
       </div>
+
       {loading ? (
         <p className="text-neutral-500 dark:text-neutral-400">Loading…</p>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {cards.map((c) => (
-            <Card key={c.label} noBodyPadding>
-              <div className="p-5">
-                <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
-                  {c.label}
-                </p>
-                <p className="mt-2 text-3xl font-semibold tabular-nums text-neutral-900 dark:text-neutral-100">
-                  {c.value}
-                </p>
-              </div>
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {cards.map((c) => (
+              <Card key={c.label} noBodyPadding>
+                <div className="p-5">
+                  <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
+                    {c.label}
+                  </p>
+                  <p className="mt-2 text-3xl font-semibold tabular-nums text-neutral-900 dark:text-neutral-100">
+                    {c.value}
+                  </p>
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card title="System status">
+              {status && (
+                <dl className="space-y-3 text-sm">
+                  <div className="flex flex-wrap justify-between gap-2 border-b border-neutral-100 pb-2 dark:border-neutral-800">
+                    <dt className="text-neutral-500 dark:text-neutral-400">
+                      Application server
+                    </dt>
+                    <dd className="font-medium capitalize text-emerald-700 dark:text-emerald-400">
+                      {status.backend}
+                    </dd>
+                  </div>
+                  <div className="flex flex-wrap justify-between gap-2 border-b border-neutral-100 pb-2 dark:border-neutral-800">
+                    <dt className="text-neutral-500 dark:text-neutral-400">
+                      AI services
+                    </dt>
+                    <dd
+                      className={
+                        status.ai_active
+                          ? "font-medium text-emerald-700 dark:text-emerald-400"
+                          : "font-medium text-amber-700 dark:text-amber-400"
+                      }
+                    >
+                      {status.ai_active ? "Active" : "Inactive"}
+                    </dd>
+                  </div>
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                    {status.ai_message}
+                  </p>
+                  <div className="flex flex-wrap justify-between gap-2 pt-1">
+                    <dt className="text-neutral-500 dark:text-neutral-400">
+                      Last recorded activity
+                    </dt>
+                    <dd className="text-neutral-800 dark:text-neutral-200">
+                      {lastAct}
+                    </dd>
+                  </div>
+                </dl>
+              )}
             </Card>
-          ))}
-        </div>
+
+            <Card title="Recent activity">
+              {activity.length === 0 ? (
+                <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                  No recent AI drafts yet.
+                </p>
+              ) : (
+                <ul className="max-h-72 space-y-2 overflow-y-auto text-sm">
+                  {activity.map((a) => (
+                    <li
+                      key={`${a.occurred_at}-${a.summary}`}
+                      className="rounded-md border border-neutral-100 px-3 py-2 dark:border-neutral-800"
+                    >
+                      <p className="font-medium text-neutral-800 dark:text-neutral-200">
+                        {a.summary}
+                      </p>
+                      <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                        {new Date(a.occurred_at).toLocaleString()}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+          </div>
+        </>
       )}
     </div>
   );

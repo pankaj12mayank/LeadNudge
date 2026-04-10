@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import Card from "../../components/Card";
 import Table from "../../components/Table";
 import Badge from "../../components/Badge";
+import PaginationBar from "../../components/PaginationBar";
 import * as adminService from "../../services/adminService";
 import * as userService from "../../services/userService";
 import { workspaceLabel } from "../../utils/workspaceLabel";
@@ -15,6 +16,15 @@ export default function Usage() {
     withAiMessage: 0,
   });
   const [rows, setRows] = useState([]);
+  const [workspaceIds, setWorkspaceIds] = useState([]);
+  const [workspaceFilter, setWorkspaceFilter] = useState("");
+  const [usagePage, setUsagePage] = useState(1);
+  const usageLimit = 25;
+  const [usageData, setUsageData] = useState({
+    items: [],
+    total: 0,
+    pages: 1,
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -52,6 +62,10 @@ export default function Usage() {
             withAiMessage: withAi,
           });
           setRows(table);
+          setWorkspaceIds(workspaces);
+          if (workspaces[0]) {
+            setWorkspaceFilter((prev) => prev || String(workspaces[0].id));
+          }
         }
       } catch (e) {
         if (!c) toast.error(e.message);
@@ -63,6 +77,26 @@ export default function Usage() {
       c = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!workspaceFilter) return;
+    let c = false;
+    (async () => {
+      try {
+        const u = await adminService.getUsageUsers({
+          workspaceId: Number(workspaceFilter),
+          page: usagePage,
+          limit: usageLimit,
+        });
+        if (!c) setUsageData(u);
+      } catch (e) {
+        if (!c) toast.error(e.message);
+      }
+    })();
+    return () => {
+      c = true;
+    };
+  }, [workspaceFilter, usagePage]);
 
   const columns = [
     { key: "id", label: "ID" },
@@ -80,15 +114,39 @@ export default function Usage() {
     { key: "usage_limit", label: "AI message cap" },
   ];
 
+  const userCols = [
+    { key: "user_id", label: "User ID" },
+    { key: "email", label: "Email" },
+    {
+      key: "is_active",
+      label: "Status",
+      render: (r) => (
+        <Badge variant={r.is_active ? "solid" : "outline"}>
+          {r.is_active ? "Active" : "Inactive"}
+        </Badge>
+      ),
+    },
+    {
+      key: "workspace_ai_messages",
+      label: "AI messages (workspace)",
+      render: (r) => (
+        <span className="tabular-nums">{r.workspace_ai_messages}</span>
+      ),
+    },
+  ];
+
   return (
-    <div className="space-y-8 p-4 lg:p-8">
+    <div className="mx-auto w-full max-w-[1600px] space-y-8 p-4 lg:p-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
-          Usage
+        <p className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+          Reporting
+        </p>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
+          Usage & limits
         </h1>
         <p className="mt-1 max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
-          <strong>Free</strong> and <strong>Pro</strong> are the two fixed workspaces. Each has its
-          own AI message cap; you can override per workspace in AI configuration.
+          Compare Free vs Pro workspaces and see how many AI drafts exist per user
+          in the selected workspace.
         </p>
       </div>
       {loading ? (
@@ -100,7 +158,7 @@ export default function Usage() {
               ["Users", summary.users],
               ["Leads", summary.leads],
               ["Follow-ups", summary.followups],
-              ["With AI draft text (sample)", summary.withAiMessage],
+              ["With AI draft (sample)", summary.withAiMessage],
             ].map(([label, val]) => (
               <Card key={label} noBodyPadding>
                 <div className="p-4">
@@ -116,6 +174,37 @@ export default function Usage() {
           </div>
           <Card title="Per-workspace caps">
             <Table columns={columns} rows={rows} />
+          </Card>
+          <Card title="Users by workspace">
+            <div className="mb-4 max-w-xs">
+              <label className="form-label">Workspace</label>
+              <select
+                className="form-select w-full"
+                value={workspaceFilter}
+                onChange={(e) => {
+                  setWorkspaceFilter(e.target.value);
+                  setUsagePage(1);
+                }}
+              >
+                {workspaceIds.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {workspaceLabel(w.name)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Table
+              columns={userCols}
+              rows={usageData.items}
+              emptyText="No users in this workspace"
+            />
+            <PaginationBar
+              page={usagePage}
+              pages={usageData.pages}
+              total={usageData.total}
+              limit={usageLimit}
+              onPageChange={setUsagePage}
+            />
           </Card>
         </>
       )}

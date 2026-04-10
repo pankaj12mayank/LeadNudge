@@ -22,14 +22,41 @@ class AdminPasswordUpdate(BaseModel):
 class BrandingOut(BaseModel):
     project_name: str
     logo_url: str | None = None
+    favicon_url: str | None = None
 
 
 class BrandingUpdate(BaseModel):
     project_name: str = Field(min_length=1, max_length=255)
 
 
+class BrandingMailOut(BaseModel):
+    support_email: str | None = None
+    mail_smtp_host: str | None = None
+    mail_smtp_port: int | None = None
+    mail_smtp_email: str | None = None
+    mail_smtp_password: str | None = None
+    reset_email_subject: str | None = None
+    reset_email_body: str | None = None
+
+
+class BrandingMailUpdate(BaseModel):
+    support_email: str | None = Field(default=None, max_length=255)
+    mail_smtp_host: str | None = Field(default=None, max_length=255)
+    mail_smtp_port: int | None = Field(default=None, ge=1, le=65535)
+    mail_smtp_email: str | None = Field(default=None, max_length=255)
+    mail_smtp_password: str | None = None
+    reset_email_subject: str | None = Field(default=None, max_length=255)
+    reset_email_body: str | None = None
+
+
+class MailTestRequest(BaseModel):
+    to_email: EmailStr
+
+
 class PublicSiteOut(BaseModel):
     project_name: str
     logo_url: str | None = None
+    favicon_url: str | None = None
+    support_email: str | None = None
     ollama_model: str
     openai_chat_model: str = "gpt-4o-mini"
