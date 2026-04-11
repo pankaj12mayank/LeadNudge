@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Navigate,
   Outlet,
@@ -7,7 +7,7 @@ import {
   useLocation,
 } from "react-router-dom";
 import Navbar from "./components/Navbar";
-import Sidebar, { MobileNav, SidebarExpandButton } from "./components/Sidebar";
+import Sidebar, { MobileNav } from "./components/Sidebar";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { useSite } from "./context/SiteContext";
 import Login from "./pages/auth/Login";
@@ -25,21 +25,20 @@ import Followups from "./pages/user/Followups";
 import EmailSettings from "./pages/user/EmailSettings";
 import Profile from "./pages/user/Profile";
 
+/** Short labels for the top header (each page hero title is different, set in the page). */
 const NAV_TITLES = {
   "/admin/dashboard": "Overview",
   "/admin/workspaces": "Workspaces",
-  "/admin/users": "Team users",
-  "/admin/ai-settings": "AI configuration",
+  "/admin/users": "Team",
+  "/admin/ai-settings": "AI setup",
   "/admin/usage": "Usage",
-  "/admin/account": "Account & branding",
+  "/admin/account": "Branding",
   "/dashboard": "Overview",
   "/leads": "Leads",
   "/followups": "Follow-ups",
-  "/email-settings": "Email (SMTP)",
+  "/email-settings": "Email",
   "/profile": "Profile",
 };
-
-const SIDEBAR_KEY = "ais_sidebar_collapsed";
 
 function Shell({ variant }) {
   const { pathname } = useLocation();
@@ -47,13 +46,6 @@ function Shell({ variant }) {
   const navTitle =
     NAV_TITLES[pathname] || (variant === "admin" ? "Admin" : "Workspace");
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(
-    () => localStorage.getItem(SIDEBAR_KEY) === "1",
-  );
-
-  useEffect(() => {
-    localStorage.setItem(SIDEBAR_KEY, sidebarCollapsed ? "1" : "0");
-  }, [sidebarCollapsed]);
 
   const projectName = site?.project_name;
   const logoUrl = site?.logo_url;
@@ -66,12 +58,7 @@ function Shell({ variant }) {
         projectName={projectName}
         logoUrl={logoUrl}
         supportEmail={supportEmail}
-        collapsed={sidebarCollapsed}
-        onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
       />
-      {sidebarCollapsed ? (
-        <SidebarExpandButton onClick={() => setSidebarCollapsed(false)} />
-      ) : null}
       <MobileNav
         variant={variant}
         open={mobileOpen}
@@ -104,7 +91,7 @@ function Shell({ variant }) {
           </button>
         </div>
         <Navbar title={navTitle} />
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 w-full min-w-0 overflow-auto">
           <Outlet />
         </main>
       </div>

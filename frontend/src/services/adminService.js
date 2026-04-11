@@ -61,6 +61,27 @@ export async function updateAdminSettings(payload) {
   return data;
 }
 
+export async function getOllamaInstalledModels() {
+  const { data } = await api.get("/admin/ollama/models");
+  return data;
+}
+
+export async function testOllamaModel(model) {
+  const s = model != null ? String(model).trim() : "";
+  const { data } = await api.post("/admin/ollama/test", {
+    model: s ? s : null,
+  });
+  return data;
+}
+
+export async function testOpenAiKey({ workspaceId, apiKey }) {
+  const { data } = await api.post("/admin/openai/test", {
+    workspace_id: workspaceId,
+    api_key: apiKey?.trim() ? apiKey.trim() : null,
+  });
+  return data;
+}
+
 export async function getSettings(workspaceId) {
   const { data } = await api.get("/settings", {
     params: { workspace_id: workspaceId },

@@ -9,6 +9,7 @@ import {
   followupPriority,
   priorityLabel,
 } from "../../utils/followupPriority";
+import { formatScheduleDisplay } from "../../utils/formatSchedule";
 
 export default function Followups() {
   const [page, setPage] = useState(1);
@@ -89,7 +90,13 @@ export default function Followups() {
       toast.warning("Lead and schedule time required");
       return;
     }
-    const iso = new Date(scheduledAt).toISOString();
+    // datetime-local is local wall time; toISOString() converts to UTC for the API.
+    const picked = new Date(scheduledAt);
+    if (Number.isNaN(picked.getTime())) {
+      toast.warning("Pick a valid date and time");
+      return;
+    }
+    const iso = picked.toISOString();
     setSaving(true);
     try {
       await userService.createFollowup({
@@ -117,7 +124,7 @@ export default function Followups() {
     {
       key: "scheduled_at",
       label: "Scheduled",
-      render: (r) => new Date(r.scheduled_at).toLocaleString(),
+      render: (r) => formatScheduleDisplay(r.scheduled_at),
     },
     {
       key: "priority",
@@ -167,16 +174,19 @@ export default function Followups() {
   ];
 
   return (
-    <div className="space-y-8 p-4 lg:p-8">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
-          Follow-ups
-        </h1>
-        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-          Schedule follow-ups and review draft copy. Priority is derived from how
-          soon the item is due.
+    <div className="w-full space-y-8 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <section className="w-full border-b border-neutral-200 pb-6 dark:border-neutral-800">
+        <p className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+          Outreach
         </p>
-      </div>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
+          Scheduled follow-ups &amp; drafts
+        </h1>
+        <p className="mt-2 w-full text-sm text-neutral-600 dark:text-neutral-400">
+          Pick a lead, set a time, and review AI-generated draft copy. Priority follows how soon
+          each item is due.
+        </p>
+      </section>
 
       <Card title="Schedule follow-up">
         <form
@@ -198,15 +208,18 @@ export default function Followups() {
               ))}
             </select>
           </div>
-          <div>
-            <label className="form-label">Date & time</label>
+          <div className="min-w-0 flex-1 sm:max-w-md">
+            <label className="form-label">Date &amp; time (your timezone)</label>
             <input
               type="datetime-local"
-              className="form-input"
+              className="form-input w-full"
               value={scheduledAt}
               onChange={(e) => setScheduledAt(e.target.value)}
               disabled={saving}
             />
+            <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+              Shown below in your local format after you save.
+            </p>
           </div>
           <button
             type="submit"

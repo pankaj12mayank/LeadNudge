@@ -53,6 +53,18 @@ def _sqlite_migrate_leads_contact() -> None:
                 pass
 
 
+def _sqlite_migrate_settings_ollama_model() -> None:
+    if not settings.database_url.startswith("sqlite"):
+        return
+    with engine.begin() as conn:
+        try:
+            conn.execute(
+                text("ALTER TABLE settings ADD COLUMN ollama_model VARCHAR(128)")
+            )
+        except Exception:
+            pass
+
+
 def _sqlite_migrate_settings_smtp() -> None:
     if not settings.database_url.startswith("sqlite"):
         return
@@ -156,6 +168,7 @@ def init_db() -> None:
     _sqlite_migrate_admins_display_name()
     _sqlite_migrate_leads_contact()
     _sqlite_migrate_settings_smtp()
+    _sqlite_migrate_settings_ollama_model()
     _sqlite_migrate_users_profile()
     _sqlite_migrate_messages_created_at()
     _sqlite_migrate_followup_failure()

@@ -156,6 +156,9 @@ def update_admin_settings(db: Session, data: AdminSettingsUpdate) -> WorkspaceSe
         row.api_key = data.api_key or None
     if data.usage_limit is not None:
         row.usage_limit = data.usage_limit
+    # Allow clearing workspace override with explicit null in JSON (PUT body).
+    if "ollama_model" in data.model_fields_set:
+        row.ollama_model = (data.ollama_model or "").strip() or None
     db.commit()
     db.refresh(row)
     return row

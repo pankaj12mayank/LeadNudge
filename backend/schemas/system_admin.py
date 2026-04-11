@@ -1,4 +1,27 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class OllamaTestRequest(BaseModel):
+    model: str | None = Field(default=None, max_length=128)
+
+
+class OllamaTestOut(BaseModel):
+    ok: bool
+    message: str
+    model: str = ""
+    preview: str | None = None
+
+
+class OpenAiTestRequest(BaseModel):
+    workspace_id: int
+    api_key: str | None = Field(default=None, max_length=4096)
+
+
+class OpenAiTestOut(BaseModel):
+    ok: bool
+    message: str
+    preview: str | None = None
+    key_source: str = ""  # "request" | "workspace" | "env" | ""
 
 
 class SystemStatusOut(BaseModel):
@@ -20,6 +43,15 @@ class UserUsageRowOut(BaseModel):
     workspace_id: int
     is_active: bool
     workspace_ai_messages: int
+
+
+class OllamaInstalledModelsOut(BaseModel):
+    """Names from `ollama list` / Ollama HTTP API (for admin UI)."""
+
+    env_default: str = ""
+    models: list[str] = Field(default_factory=list)
+    ollama_url: str = ""
+    error: str | None = None
 
 
 class PaginatedUserUsage(BaseModel):

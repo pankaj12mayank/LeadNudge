@@ -93,16 +93,19 @@ export default function Dashboard() {
   }, [dashPage, dashLimit, dashQ]);
 
   return (
-    <div className="space-y-8 p-4 lg:p-8">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
+    <div className="w-full space-y-8 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <section className="w-full border-b border-neutral-200 pb-6 dark:border-neutral-800">
+        <p className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+          Today
+        </p>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
           Workspace snapshot
         </h1>
-        <p className="mt-1 max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+        <p className="mt-2 w-full text-sm text-neutral-600 dark:text-neutral-400">
           Totals reflect your workspace only. Schedule follow-ups from the Follow-ups page; each
           run may generate a draft message for your review. Usage limits apply per your plan.
         </p>
-      </div>
+      </section>
       {loading ? (
         <p className="text-neutral-500 dark:text-neutral-400">Loading…</p>
       ) : (

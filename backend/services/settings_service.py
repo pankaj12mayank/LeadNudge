@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from models.settings import WorkspaceSettings
 from schemas.settings import SettingsOut, SettingsUpdate
+from utils.smtp_errors import format_smtp_error
 
 
 def get_settings_out(
@@ -35,6 +36,7 @@ def get_settings_out(
         ai_mode=row.ai_mode,
         api_key=key,
         usage_limit=row.usage_limit,
+        ollama_model=row.ollama_model,
         smtp_host=row.smtp_host,
         smtp_port=row.smtp_port,
         smtp_email=row.smtp_email,
@@ -128,4 +130,4 @@ def test_smtp_connection(db: Session, workspace_id: int) -> tuple[bool, str]:
                     smtp.login(user, row.smtp_password)
         return True, "SMTP connection OK"
     except Exception as e:
-        return False, str(e) or "Connection failed"
+        return False, format_smtp_error(e)

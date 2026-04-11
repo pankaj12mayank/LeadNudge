@@ -39,7 +39,10 @@ def public_site_payload(db: Session) -> dict:
         "logo_url": logo_public_path(b.logo_filename),
         "favicon_url": logo_public_path(b.favicon_filename),
         "support_email": b.support_email,
-        "ollama_model": settings.ollama_model,
+        "ollama_base_url": (settings.ollama_base_url or "http://127.0.0.1:11434").rstrip(
+            "/"
+        ),
+        "ollama_model": settings.ollama_model or "llama3.2:latest",
         "openai_chat_model": "gpt-4o-mini",
     }
 

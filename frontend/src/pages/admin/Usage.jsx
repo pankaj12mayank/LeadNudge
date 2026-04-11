@@ -115,7 +115,7 @@ export default function Usage() {
   ];
 
   const userCols = [
-    { key: "user_id", label: "User ID" },
+    { key: "user_id", label: "User #" },
     { key: "email", label: "Email" },
     {
       key: "is_active",
@@ -136,19 +136,19 @@ export default function Usage() {
   ];
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] space-y-8 p-4 lg:p-8">
-      <div>
+    <div className="w-full space-y-8 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <section className="w-full border-b border-neutral-200 pb-6 dark:border-neutral-800">
         <p className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
           Reporting
         </p>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
-          Usage & limits
+          Reports &amp; per-user AI usage
         </h1>
-        <p className="mt-1 max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
-          Compare Free vs Pro workspaces and see how many AI drafts exist per user
-          in the selected workspace.
+        <p className="mt-2 w-full text-sm text-neutral-600 dark:text-neutral-400">
+          Compare workspace caps and drill into each person&apos;s AI message count in the
+          workspace you select.
         </p>
-      </div>
+      </section>
       {loading ? (
         <p className="text-neutral-500 dark:text-neutral-400">Loading…</p>
       ) : (
@@ -173,10 +173,12 @@ export default function Usage() {
             ))}
           </div>
           <Card title="Per-workspace caps">
-            <Table columns={columns} rows={rows} />
+            <div className="w-full overflow-x-auto">
+              <Table columns={columns} rows={rows} />
+            </div>
           </Card>
           <Card title="Users by workspace">
-            <div className="mb-4 max-w-xs">
+            <div className="mb-4 w-full max-w-md">
               <label className="form-label">Workspace</label>
               <select
                 className="form-select w-full"
@@ -193,11 +195,13 @@ export default function Usage() {
                 ))}
               </select>
             </div>
-            <Table
-              columns={userCols}
-              rows={usageData.items}
-              emptyText="No users in this workspace"
-            />
+            <div className="w-full overflow-x-auto">
+              <Table
+                columns={userCols}
+                rows={usageData.items}
+                emptyText="No users in this workspace"
+              />
+            </div>
             <PaginationBar
               page={usagePage}
               pages={usageData.pages}

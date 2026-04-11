@@ -58,5 +58,6 @@ class PublicSiteOut(BaseModel):
     logo_url: str | None = None
     favicon_url: str | None = None
     support_email: str | None = None
+    ollama_base_url: str
     ollama_model: str
     openai_chat_model: str = "gpt-4o-mini"

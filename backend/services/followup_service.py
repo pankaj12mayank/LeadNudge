@@ -70,6 +70,7 @@ def create_followup(
 
     msg: Message | None = None
     try:
+        om = (settings.ollama_model or "").strip() or None
         content = generate_followup(
             lead_name=lead.name,
             lead_email=lead.email,
@@ -77,6 +78,7 @@ def create_followup(
             lead_tag=lead.tag,
             ai_mode=settings.ai_mode,
             api_key=settings.api_key,
+            ollama_model=om,
         )
         if content:
             msg = Message(lead_id=lead.id, content=content)

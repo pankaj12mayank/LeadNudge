@@ -39,8 +39,6 @@ export default function Sidebar({
   projectName,
   logoUrl,
   supportEmail,
-  collapsed,
-  onToggleCollapse,
 }) {
   const links = variant === "admin" ? adminLinks : userLinks;
   const home = variant === "admin" ? "/admin/dashboard" : "/dashboard";
@@ -48,11 +46,7 @@ export default function Sidebar({
   const imgSrc = mediaUrl(logoUrl);
 
   return (
-    <aside
-      className={`relative hidden shrink-0 border-r border-neutral-200 bg-white transition-[width] duration-200 dark:border-neutral-800 dark:bg-neutral-950 lg:flex lg:flex-col ${
-        collapsed ? "w-0 overflow-hidden border-r-0" : "w-60"
-      }`}
-    >
+    <aside className="relative hidden w-60 shrink-0 flex-col border-r border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950 lg:flex">
       <div className="flex min-h-14 flex-col gap-2 border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
         <NavLink
           to={home}
@@ -71,13 +65,6 @@ export default function Sidebar({
           )}
           <span className="line-clamp-2 text-sm leading-tight">{displayName}</span>
         </NavLink>
-        <button
-          type="button"
-          onClick={onToggleCollapse}
-          className="hidden text-left text-xs font-medium text-neutral-500 underline decoration-neutral-400 underline-offset-2 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200 lg:block"
-        >
-          {collapsed ? "" : "Collapse sidebar"}
-        </button>
       </div>
       <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
         {links.map((l) => (
@@ -166,18 +153,5 @@ export function MobileNav({
         </nav>
       </div>
     </div>
-  );
-}
-
-export function SidebarExpandButton({ onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="btn-secondary fixed left-2 top-16 z-30 hidden px-2 py-1 text-xs lg:block"
-      aria-label="Open sidebar"
-    >
-      Menu
-    </button>
   );
 }

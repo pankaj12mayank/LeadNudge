@@ -61,19 +61,19 @@ export default function AdminDashboard() {
     : "—";
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] space-y-8 p-4 lg:p-8">
-      <div>
+    <div className="w-full space-y-8 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <section className="w-full border-b border-neutral-200 pb-6 dark:border-neutral-800">
         <p className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
           Admin home
         </p>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
-          Workspace overview
+          Live operations &amp; system health
         </h1>
-        <p className="mt-1 max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
-          High-level counts, system health, and the latest AI draft activity across
-          all workspaces.
+        <p className="mt-2 w-full text-sm text-neutral-600 dark:text-neutral-400">
+          High-level counts, backend/AI status, and the latest draft activity across all
+          workspaces.
         </p>
-      </div>
+      </section>
 
       {loading ? (
         <p className="text-neutral-500 dark:text-neutral-400">Loading…</p>

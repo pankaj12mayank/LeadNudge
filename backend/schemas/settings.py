@@ -8,6 +8,7 @@ class SettingsOut(BaseModel):
     ai_mode: str
     api_key: str | None
     usage_limit: int
+    ollama_model: str | None = None
     smtp_host: str | None = None
     smtp_port: int | None = None
     smtp_email: str | None = None
@@ -49,6 +50,7 @@ class AdminSettingsUpdate(BaseModel):
     ai_mode: str | None = Field(default=None, pattern="^(local|api)$")
     api_key: str | None = None
     usage_limit: int | None = Field(default=None, ge=0)
+    ollama_model: str | None = Field(default=None, max_length=128)
 
 
 class SmtpTestResult(BaseModel):

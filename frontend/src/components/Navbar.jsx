@@ -10,7 +10,7 @@ export default function Navbar({ title, showThemeToggle = true }) {
 
   return (
     <header className="sticky top-0 z-20 w-full border-b border-neutral-200 bg-white/95 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/95">
-      <div className="mx-auto flex h-14 w-full max-w-[1600px] items-center justify-between gap-3 px-4 lg:px-8">
+      <div className="flex h-14 w-full items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
         <h1 className="min-w-0 truncate text-base font-semibold text-neutral-900 dark:text-neutral-100 lg:text-lg">
           {title}
         </h1>

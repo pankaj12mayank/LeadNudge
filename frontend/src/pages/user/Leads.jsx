@@ -265,24 +265,30 @@ export default function Leads() {
   ];
 
   return (
-    <div className="space-y-8 p-4 lg:p-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
-            Leads
-          </h1>
-          <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-            Import a CSV or add contacts one at a time. Search and edit anytime.
-          </p>
+    <div className="w-full space-y-8 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <section className="w-full border-b border-neutral-200 pb-6 dark:border-neutral-800">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+              Pipeline
+            </p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
+              Contact list &amp; stages
+            </h1>
+            <p className="mt-2 w-full text-sm text-neutral-600 dark:text-neutral-400">
+              Import CSV or add one contact at a time. Search, edit status, and keep phone numbers
+              current.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn-primary w-full shrink-0 sm:w-auto"
+            onClick={() => setAddOpen(true)}
+          >
+            Add lead
+          </button>
         </div>
-        <button
-          type="button"
-          className="btn-primary w-full shrink-0 sm:w-auto"
-          onClick={() => setAddOpen(true)}
-        >
-          Add lead
-        </button>
-      </div>
+      </section>
 
       <Card title="Import CSV">
         <div className="flex flex-wrap items-center gap-3">

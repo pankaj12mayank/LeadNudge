@@ -1,4 +1,5 @@
 import {
+  createContext,
   useCallback,
   useContext,
   useEffect,
@@ -26,7 +27,8 @@ export function SiteProvider({ children }) {
         logo_url: null,
         favicon_url: null,
         support_email: null,
-        ollama_model: "llama3.2",
+        ollama_base_url: "http://127.0.0.1:11434",
+        ollama_model: "llama3.2:latest",
         openai_chat_model: "gpt-4o-mini",
       });
     }

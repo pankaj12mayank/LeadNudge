@@ -14,6 +14,7 @@ class WorkspaceSettings(Base):
     ai_mode: Mapped[str] = mapped_column(String(16), default="local")
     api_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
     usage_limit: Mapped[int] = mapped_column(Integer, default=1000)
+    ollama_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
     smtp_host: Mapped[str | None] = mapped_column(String(255), nullable=True)
     smtp_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
     smtp_email: Mapped[str | None] = mapped_column(String(255), nullable=True)

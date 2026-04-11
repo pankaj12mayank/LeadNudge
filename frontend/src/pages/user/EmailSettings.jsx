@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import Card from "../../components/Card";
+import PasswordField from "../../components/PasswordField";
 import * as userService from "../../services/userService";
 
 export default function EmailSettings() {
@@ -69,23 +70,30 @@ export default function EmailSettings() {
   }
 
   return (
-    <div className="space-y-6 p-4 lg:p-8">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
-          Email (SMTP)
-        </h1>
-        <p className="mt-1 max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
-          When a follow-up draft is generated, the app can email the lead using these
-          settings. Use a provider that allows SMTP (e.g. workspace Gmail with an app
-          password, or your mail host).
+    <div className="w-full space-y-8 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <section className="w-full border-b border-neutral-200 pb-6 dark:border-neutral-800">
+        <p className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+          Delivery
         </p>
-      </div>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
+          Outgoing mail for your workspace
+        </h1>
+        <p className="mt-2 w-full text-sm text-neutral-600 dark:text-neutral-400">
+          When a follow-up runs, the app can email the lead using these SMTP settings.
+        </p>
+      </section>
 
       <Card title="Outgoing mail">
         {loading ? (
           <p className="text-neutral-500 dark:text-neutral-400">Loading…</p>
         ) : (
           <form onSubmit={onSave} className="max-w-lg space-y-4">
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+              <strong>Gmail / Google:</strong> use <code className="text-xs">smtp.gmail.com</code>, port{" "}
+              <code className="text-xs">587</code>, your full email, and an{" "}
+              <strong>App Password</strong> (not your normal password) if 2-Step Verification is on.
+              Create one under Google Account → Security → App passwords.
+            </p>
             <div>
               <label className="form-label">SMTP host</label>
               <input
@@ -125,18 +133,14 @@ export default function EmailSettings() {
                 required
               />
             </div>
-            <div>
-              <label className="form-label">SMTP password</label>
-              <input
-                type="password"
-                className="form-input"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={saving}
-                placeholder="Leave blank to keep current password"
-                autoComplete="new-password"
-              />
-            </div>
+            <PasswordField
+              label="SMTP password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={saving}
+              placeholder="Leave blank to keep current password"
+              autoComplete="new-password"
+            />
             <div className="flex flex-wrap gap-2">
               <button
                 type="submit"

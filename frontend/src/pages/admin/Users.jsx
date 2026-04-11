@@ -138,7 +138,7 @@ export default function Users() {
   }
 
   const columns = [
-    { key: "id", label: "ID" },
+    { key: "id", label: "#" },
     { key: "email", label: "Email" },
     {
       key: "workspace_id",
@@ -193,19 +193,19 @@ export default function Users() {
   ];
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] space-y-8 p-4 lg:p-8">
-      <div>
+    <div className="w-full space-y-8 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <section className="w-full border-b border-neutral-200 pb-6 dark:border-neutral-800">
         <p className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
           Access control
         </p>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
-          Team users
+          Invites, access &amp; removal
         </h1>
-        <p className="mt-1 max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
-          Invite people to the Free or Pro workspace. You can deactivate access or
-          remove a user at any time.
+        <p className="mt-2 w-full text-sm text-neutral-600 dark:text-neutral-400">
+          Invite people to the Free or Pro workspace. Deactivate sign-in or delete a user
+          at any time.
         </p>
-      </div>
+      </section>
 
       <Card title="Invite user">
         <form onSubmit={onCreate} className="space-y-5">
@@ -299,11 +299,13 @@ export default function Users() {
           <p className="text-neutral-500 dark:text-neutral-400">Loading…</p>
         ) : (
           <>
-            <Table
-              columns={columns}
-              rows={usersRes.items}
-              emptyText="No users yet"
-            />
+            <div className="w-full overflow-x-auto">
+              <Table
+                columns={columns}
+                rows={usersRes.items}
+                emptyText="No users yet"
+              />
+            </div>
             <PaginationBar
               page={page}
               pages={usersRes.pages}

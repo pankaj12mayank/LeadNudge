@@ -1,0 +1,2 @@
+# Written at runtime so Vite proxy matches the backend (auto port)
+.backend-port

@@ -224,16 +224,18 @@ export default function AdminAccount() {
   }
 
   return (
-    <div className="space-y-8 p-4 lg:p-8">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
-          Account & branding
-        </h1>
-        <p className="mt-1 max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
-          Your admin profile, how the product appears, and outbound email for password resets
-          and support links.
+    <div className="w-full space-y-8 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <section className="w-full border-b border-neutral-200 pb-6 dark:border-neutral-800">
+        <p className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+          Organization
         </p>
-      </div>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
+          Account, mail &amp; appearance
+        </h1>
+        <p className="mt-2 w-full text-sm text-neutral-600 dark:text-neutral-400">
+          Sign-in profile, product name, logo, favicon, and SMTP for password-reset emails.
+        </p>
+      </section>
 
       {loadError ? (
         <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
@@ -307,6 +309,12 @@ export default function AdminAccount() {
               {"{{reset_link}}"}
             </code>{" "}
             in the email body template.
+          </p>
+          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+            <strong>Gmail:</strong> use <code className="text-xs">smtp.gmail.com</code>, port{" "}
+            <code className="text-xs">587</code>, and a Google{" "}
+            <strong>App password</strong> if 2-Step Verification is enabled (normal passwords return
+            error 534).
           </p>
           <div>
             <label className="form-label">Support email (shown to users)</label>

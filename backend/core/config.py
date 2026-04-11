@@ -1,9 +1,28 @@
+from pathlib import Path
+
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+_BACKEND_DIR = Path(__file__).resolve().parent.parent
+_REPO_ROOT = _BACKEND_DIR.parent
+# Load order: backend/.env first, then repo-root ports.env (ports.env wins on same keys).
+# So BACKEND_PORT=0 in ports.env overrides an old PORT=8000 in .env (fixes busy 8000).
+_env_list: list[str] = []
+_env_backend = _BACKEND_DIR / ".env"
+if _env_backend.is_file():
+    _env_list.append(str(_env_backend))
+_ports = _REPO_ROOT / "ports.env"
+if _ports.is_file():
+    _env_list.append(str(_ports))
+_ENV_FILES: tuple[str, ...] = tuple(_env_list)
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=_ENV_FILES if _ENV_FILES else None,
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     database_url: str = "sqlite:///./app.db"
     secret_key: str = "secret"
@@ -23,15 +42,18 @@ class Settings(BaseSettings):
         ),
     )
     ollama_model: str = Field(
-        default="llama3.2",
+        default="llama3.2:latest",
         validation_alias=AliasChoices("OLLAMA_MODEL", "ollama_model"),
     )
     openai_api_key: str | None = Field(
         default=None,
         validation_alias=AliasChoices("OPENAI_API_KEY", "openai_api_key"),
     )
+    # Use 0 for "first free port" from 8000 upward (see run_prod.py + ports.env).
     backend_port: int = Field(
         default=8000,
+        ge=0,
+        le=65535,
         validation_alias=AliasChoices("BACKEND_PORT", "PORT", "backend_port"),
     )
     # Extra CORS origins (comma-separated), appended to built-in dev defaults

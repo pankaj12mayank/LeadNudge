@@ -88,18 +88,18 @@ export default function Profile() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] space-y-8 p-4 lg:p-8">
-      <div>
+    <div className="w-full space-y-8 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <section className="w-full border-b border-neutral-200 pb-6 dark:border-neutral-800">
         <p className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
           Your account
         </p>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
-          Profile & security
+          Your details &amp; password
         </h1>
-        <p className="mt-1 max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
-          Update how your name appears in the header and change your password.
+        <p className="mt-2 w-full text-sm text-neutral-600 dark:text-neutral-400">
+          Update how your name appears in the header, your phone number, and your password.
         </p>
-      </div>
+      </section>
 
       <Card title="Profile">
         <form onSubmit={saveProfile} className="max-w-md space-y-4">
