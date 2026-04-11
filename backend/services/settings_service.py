@@ -9,6 +9,7 @@ from models.lead import Lead
 from models.message import Message
 from models.outbound_email import OutboundEmail
 from models.settings import WorkspaceSettings
+from models.workspace import Workspace
 from schemas.settings import SettingsOut, SettingsUpdate
 from utils.smtp_errors import format_smtp_error
 
@@ -78,6 +79,10 @@ def get_settings_out(
         smtp_port=row.smtp_port,
         smtp_email=row.smtp_email,
         smtp_password=smtp_pw,
+        followup_subject_template=row.followup_subject_template,
+        followup_opening_line=row.followup_opening_line,
+        followup_closing_template=row.followup_closing_template,
+        followup_sender_display_name=row.followup_sender_display_name,
         ai_messages_used=used,
         outbound_emails_sent=outbound_n,
         usage_percent=round(pct, 2),
@@ -101,7 +106,14 @@ def update_user_settings(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin can set API key",
         )
+    ws_plan = db.get(Workspace, workspace_id)
+    plan = (ws_plan.plan_type or "free").lower() if ws_plan else "free"
     if data.ai_mode is not None:
+        if plan != "pro" and data.ai_mode == "api":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="OpenAI (API) mode is only available on the Pro workspace.",
+            )
         row.ai_mode = data.ai_mode
     if data.usage_limit is not None:
         row.usage_limit = data.usage_limit
@@ -129,6 +141,22 @@ def update_user_settings(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="SMTP requires smtp_host, smtp_port, and smtp_email",
             )
+
+    if data.followup_subject_template is not None:
+        s = (data.followup_subject_template or "").strip()
+        row.followup_subject_template = s or None
+    if data.followup_opening_line is not None:
+        s = (data.followup_opening_line or "").strip()
+        row.followup_opening_line = s or None
+    if data.followup_closing_template is not None:
+        s = (data.followup_closing_template or "").strip()
+        row.followup_closing_template = s or None
+    if data.followup_sender_display_name is not None:
+        s = (data.followup_sender_display_name or "").strip()
+        row.followup_sender_display_name = s or None
+
+    if ws_plan and (ws_plan.plan_type or "free").lower() != "pro":
+        row.ai_mode = "local"
 
     db.commit()
     db.refresh(row)

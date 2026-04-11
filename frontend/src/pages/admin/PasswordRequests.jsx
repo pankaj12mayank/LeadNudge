@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import Card from "../../components/Card";
@@ -16,11 +16,20 @@ export default function PasswordRequests() {
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [qInput, setQInput] = useState("");
+  const [statusInput, setStatusInput] = useState("");
+  const [qApplied, setQApplied] = useState("");
+  const [statusApplied, setStatusApplied] = useState("");
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await adminService.listPasswordRequests({ page, limit });
+      const data = await adminService.listPasswordRequests({
+        page,
+        limit,
+        q: qApplied || undefined,
+        status: statusApplied || undefined,
+      });
       setItems(data.items ?? []);
       setTotal(data.total ?? 0);
       setPages(data.pages ?? 1);
@@ -29,11 +38,26 @@ export default function PasswordRequests() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [page, limit, qApplied, statusApplied]);
 
   useEffect(() => {
     load();
-  }, [page]);
+  }, [load]);
+
+  function onApplyFilters(e) {
+    e.preventDefault();
+    setQApplied(qInput.trim());
+    setStatusApplied(statusInput);
+    setPage(1);
+  }
+
+  function onClearFilters() {
+    setQInput("");
+    setStatusInput("");
+    setQApplied("");
+    setStatusApplied("");
+    setPage(1);
+  }
 
   async function onResolve(row) {
     if (row.status !== "pending") return;
@@ -72,7 +96,9 @@ export default function PasswordRequests() {
             type="button"
             className="text-xs font-medium text-blue-700 underline decoration-blue-300 underline-offset-2 dark:text-blue-400"
             onClick={() =>
-              navigate("/admin/users", { state: { presetSearch: r.user_email } })
+              navigate("/admin/users", {
+                state: { presetSearch: r.user_email },
+              })
             }
           >
             Open in Team
@@ -105,6 +131,56 @@ export default function PasswordRequests() {
           under Team users, then mark the row resolved when done.
         </p>
       </section>
+
+      <Card title="Search & filter">
+        <form
+          onSubmit={onApplyFilters}
+          className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end"
+        >
+          <div className="min-w-[200px] flex-1">
+            <label className="form-label" htmlFor="pr-q">
+              Email contains
+            </label>
+            <input
+              id="pr-q"
+              className="form-input w-full"
+              value={qInput}
+              onChange={(e) => setQInput(e.target.value)}
+              placeholder="user@company.com"
+              disabled={loading}
+            />
+          </div>
+          <div className="w-full sm:w-44">
+            <label className="form-label" htmlFor="pr-status">
+              Status
+            </label>
+            <select
+              id="pr-status"
+              className="form-input w-full"
+              value={statusInput}
+              onChange={(e) => setStatusInput(e.target.value)}
+              disabled={loading}
+            >
+              <option value="">All</option>
+              <option value="pending">Pending</option>
+              <option value="resolved">Resolved</option>
+            </select>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="submit" className="btn-primary" disabled={loading}>
+              Apply
+            </button>
+            <button
+              type="button"
+              className="rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-900"
+              onClick={onClearFilters}
+              disabled={loading}
+            >
+              Clear
+            </button>
+          </div>
+        </form>
+      </Card>
 
       <Card title="Queue">
         {loading ? (

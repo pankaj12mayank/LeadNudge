@@ -52,6 +52,13 @@ export async function listEmailTemplates() {
   return data;
 }
 
+export async function getEmailTemplate(name) {
+  const { data } = await api.get(
+    `/admin/email-templates/${encodeURIComponent(name)}`,
+  );
+  return data;
+}
+
 export async function putEmailTemplate(name, payload) {
   const { data } = await api.put(
     `/admin/email-templates/${encodeURIComponent(name)}`,
@@ -60,10 +67,16 @@ export async function putEmailTemplate(name, payload) {
   return data;
 }
 
-export async function listPasswordRequests({ page = 1, limit = 30 } = {}) {
-  const { data } = await api.get("/admin/password-requests", {
-    params: { page, limit },
-  });
+export async function listPasswordRequests({
+  page = 1,
+  limit = 30,
+  q,
+  status,
+} = {}) {
+  const params = { page, limit };
+  if (q) params.q = q;
+  if (status) params.status = status;
+  const { data } = await api.get("/admin/password-requests", { params });
   return data;
 }
 
@@ -92,6 +105,19 @@ export async function getSystemLogs({ page = 1, limit = 30, log_type } = {}) {
   const params = { page, limit };
   if (log_type) params.log_type = log_type;
   const { data } = await api.get("/admin/system-logs", { params });
+  return data;
+}
+
+export async function deleteSystemLogs(ids) {
+  const { data } = await api.post("/admin/system-logs/delete", { ids });
+  return data;
+}
+
+export async function clearSystemLogsMonth(year, month) {
+  const { data } = await api.post("/admin/system-logs/clear-month", {
+    year,
+    month,
+  });
   return data;
 }
 

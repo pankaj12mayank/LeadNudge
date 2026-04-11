@@ -237,6 +237,23 @@ def init_db() -> None:
     from models import workspace  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    if settings.database_url.startswith("sqlite"):
+        with engine.begin() as conn:
+            try:
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_messages_lead_followup "
+                        "ON messages (lead_id, followup_id)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_password_requests_status_id "
+                        "ON password_requests (status, id)"
+                    )
+                )
+            except Exception:
+                pass
     _ensure_column_if_missing(
         "leads",
         "last_message",
@@ -286,6 +303,41 @@ def init_db() -> None:
     _sqlite_migrate_leads_contact()
     _sqlite_migrate_settings_smtp()
     _sqlite_migrate_settings_ollama_model()
+    _ensure_column_if_missing(
+        "settings",
+        "followup_subject_template",
+        sqlite_ddl="ALTER TABLE settings ADD COLUMN followup_subject_template VARCHAR(255)",
+        postgres_ddl=(
+            "ALTER TABLE settings ADD COLUMN IF NOT EXISTS "
+            "followup_subject_template VARCHAR(255)"
+        ),
+    )
+    _ensure_column_if_missing(
+        "settings",
+        "followup_opening_line",
+        sqlite_ddl="ALTER TABLE settings ADD COLUMN followup_opening_line VARCHAR(500)",
+        postgres_ddl=(
+            "ALTER TABLE settings ADD COLUMN IF NOT EXISTS "
+            "followup_opening_line VARCHAR(500)"
+        ),
+    )
+    _ensure_column_if_missing(
+        "settings",
+        "followup_closing_template",
+        sqlite_ddl="ALTER TABLE settings ADD COLUMN followup_closing_template TEXT",
+        postgres_ddl=(
+            "ALTER TABLE settings ADD COLUMN IF NOT EXISTS followup_closing_template TEXT"
+        ),
+    )
+    _ensure_column_if_missing(
+        "settings",
+        "followup_sender_display_name",
+        sqlite_ddl="ALTER TABLE settings ADD COLUMN followup_sender_display_name VARCHAR(120)",
+        postgres_ddl=(
+            "ALTER TABLE settings ADD COLUMN IF NOT EXISTS "
+            "followup_sender_display_name VARCHAR(120)"
+        ),
+    )
     _sqlite_migrate_users_profile()
     _sqlite_migrate_messages_created_at()
     _sqlite_migrate_followup_failure()

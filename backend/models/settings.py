@@ -19,6 +19,16 @@ class WorkspaceSettings(Base):
     smtp_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
     smtp_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     smtp_password: Mapped[str | None] = mapped_column(Text, nullable=True)
+    followup_subject_template: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
+    followup_opening_line: Mapped[str | None] = mapped_column(
+        String(500), nullable=True
+    )
+    followup_closing_template: Mapped[str | None] = mapped_column(Text, nullable=True)
+    followup_sender_display_name: Mapped[str | None] = mapped_column(
+        String(120), nullable=True
+    )
 
     workspace: Mapped["Workspace"] = relationship(
         "Workspace", back_populates="settings_row"

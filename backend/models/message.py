@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db.base import Base
@@ -12,6 +12,7 @@ def _utc_now():
 
 class Message(Base):
     __tablename__ = "messages"
+    __table_args__ = (Index("ix_messages_lead_followup", "lead_id", "followup_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     lead_id: Mapped[int] = mapped_column(ForeignKey("leads.id"), index=True)

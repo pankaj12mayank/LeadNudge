@@ -30,17 +30,39 @@ def submit_password_request(db: Session, email: str) -> None:
         )
     )
     db.commit()
+    # Acknowledgment to the user (best-effort; failures go to system_logs).
+    from services import template_mail_service as tm
+
+    nm = (raw.split("@", 1)[0] or "there").strip()
+    pv = tm.project_variables(db)
+    tm.try_send_template(
+        db,
+        tm.TEMPLATE_PASSWORD_REQUEST_RECEIVED,
+        raw,
+        {"name": nm, "email": raw, **pv},
+    )
 
 
 def list_password_requests(
-    db: Session, *, page: int, limit: int
+    db: Session,
+    *,
+    page: int,
+    limit: int,
+    q: str | None = None,
+    status_filter: str | None = None,
 ) -> tuple[list[PasswordRequest], int]:
     page = PaginationParams.clamp_page(page)
     limit = PaginationParams.clamp_limit(limit)
-    q = db.query(PasswordRequest).order_by(PasswordRequest.id.desc())
-    total = q.count()
+    query = db.query(PasswordRequest)
+    if q and q.strip():
+        term = f"%{q.strip()}%"
+        query = query.filter(PasswordRequest.user_email.ilike(term))
+    if status_filter in ("pending", "resolved"):
+        query = query.filter(PasswordRequest.status == status_filter)
+    query = query.order_by(PasswordRequest.id.desc())
+    total = query.count()
     offset = (page - 1) * limit
-    rows = q.offset(offset).limit(limit).all()
+    rows = query.offset(offset).limit(limit).all()
     return rows, total
 
 

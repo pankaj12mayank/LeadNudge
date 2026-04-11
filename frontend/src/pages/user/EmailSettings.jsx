@@ -16,6 +16,12 @@ export default function EmailSettings() {
   const [hasSavedPassword, setHasSavedPassword] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  const [followupSubjectTpl, setFollowupSubjectTpl] = useState("");
+  const [followupOpening, setFollowupOpening] = useState("");
+  const [followupClosing, setFollowupClosing] = useState("");
+  const [followupSenderName, setFollowupSenderName] = useState("");
+  const [savingTemplates, setSavingTemplates] = useState(false);
+
   useEffect(() => {
     let c = false;
     (async () => {
@@ -29,6 +35,10 @@ export default function EmailSettings() {
         setHasSavedPassword(s.smtp_password === "***");
         setOutboundSent(s.outbound_emails_sent ?? 0);
         setSmtpReady(Boolean(s.smtp_fully_configured));
+        setFollowupSubjectTpl(s.followup_subject_template || "");
+        setFollowupOpening(s.followup_opening_line || "");
+        setFollowupClosing(s.followup_closing_template || "");
+        setFollowupSenderName(s.followup_sender_display_name || "");
       } catch (e) {
         toast.error(e.message);
       } finally {
@@ -80,6 +90,32 @@ export default function EmailSettings() {
       toast.error(err.message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function onSaveTemplates(e) {
+    e.preventDefault();
+    setSavingTemplates(true);
+    try {
+      await userService.updateSettings({
+        followup_subject_template: followupSubjectTpl.trim(),
+        followup_opening_line: followupOpening.trim(),
+        followup_closing_template: followupClosing.trim(),
+        followup_sender_display_name: followupSenderName.trim(),
+      });
+      toast.success("Follow-up email layout saved", {
+        description:
+          "Subject, greeting, and signature apply to the next automated follow-up emails.",
+      });
+      const s2 = await userService.getSettings();
+      setFollowupSubjectTpl(s2.followup_subject_template || "");
+      setFollowupOpening(s2.followup_opening_line || "");
+      setFollowupClosing(s2.followup_closing_template || "");
+      setFollowupSenderName(s2.followup_sender_display_name || "");
+    } catch (err) {
+      toast.error(err.message || "Could not save templates.");
+    } finally {
+      setSavingTemplates(false);
     }
   }
 
@@ -228,6 +264,93 @@ export default function EmailSettings() {
                 {testing ? "Testing…" : "Test email"}
               </button>
             </div>
+          </form>
+        )}
+      </Card>
+
+      <Card title="Follow-up email layout">
+        {loading ? (
+          <p className="text-neutral-500 dark:text-neutral-400">Loading…</p>
+        ) : (
+          <form onSubmit={onSaveTemplates} className="max-w-2xl space-y-4">
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              When a scheduled follow-up sends automatically, the server builds the email from: your
+              opening line, the <strong>AI-generated middle</strong> (based on each lead&apos;s last
+              note and history), then your closing. Use placeholders:{" "}
+              <code className="rounded bg-neutral-100 px-1 text-xs dark:bg-neutral-800">
+                {"{{lead_name}}"}
+              </code>
+              ,{" "}
+              <code className="rounded bg-neutral-100 px-1 text-xs dark:bg-neutral-800">
+                {"{{lead_email}}"}
+              </code>
+              ,{" "}
+              <code className="rounded bg-neutral-100 px-1 text-xs dark:bg-neutral-800">
+                {"{{sender_name}}"}
+              </code>
+              ,{" "}
+              <code className="rounded bg-neutral-100 px-1 text-xs dark:bg-neutral-800">
+                {"{{sender_email}}"}
+              </code>
+              .
+            </p>
+            <div>
+              <label className="form-label">Subject line</label>
+              <input
+                className="form-input"
+                value={followupSubjectTpl}
+                onChange={(e) => setFollowupSubjectTpl(e.target.value)}
+                disabled={savingTemplates}
+                placeholder="Following up — {{lead_name}}"
+              />
+              <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                Leave empty to use the default above.
+              </p>
+            </div>
+            <div>
+              <label className="form-label">Opening line (greeting)</label>
+              <input
+                className="form-input"
+                value={followupOpening}
+                onChange={(e) => setFollowupOpening(e.target.value)}
+                disabled={savingTemplates}
+                placeholder="Hi {{lead_name}},"
+              />
+              <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                Default if empty: Hi {"{{lead_name}}"},
+              </p>
+            </div>
+            <div>
+              <label className="form-label">Closing / signature</label>
+              <textarea
+                className="form-input min-h-[100px] font-mono text-sm"
+                value={followupClosing}
+                onChange={(e) => setFollowupClosing(e.target.value)}
+                disabled={savingTemplates}
+                placeholder={"Thank you,\n{{sender_name}}"}
+                spellCheck={false}
+              />
+              <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                Default if empty: Best regards + new line + {"{{sender_name}}"}. Use line breaks for
+                multiple lines.
+              </p>
+            </div>
+            <div>
+              <label className="form-label">Your name (sign-off)</label>
+              <input
+                className="form-input max-w-md"
+                value={followupSenderName}
+                onChange={(e) => setFollowupSenderName(e.target.value)}
+                disabled={savingTemplates}
+                placeholder="e.g. Alex Kumar"
+              />
+              <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                Fills {"{{sender_name}}"}. If empty, the first part of your sender email is used.
+              </p>
+            </div>
+            <button type="submit" disabled={savingTemplates} className="btn-primary">
+              {savingTemplates ? "Saving…" : "Save email layout"}
+            </button>
           </form>
         )}
       </Card>

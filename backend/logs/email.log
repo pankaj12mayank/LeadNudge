@@ -203,3 +203,7 @@ Traceback (most recent call last):
     raise SMTPServerDisconnected("Connection unexpectedly closed: "
                                  + str(e))
 smtplib.SMTPServerDisconnected: Connection unexpectedly closed: The read operation timed out
+2026-04-11 19:10:10,293 INFO ais.email_file followup_email sent host=smtp.gmail.com to=dante12mk@gmail.com
+2026-04-11 19:14:11,252 INFO ais.email_file transactional_email sent host=smtp.gmail.com to=user@example.com
+2026-04-11 19:54:13,989 INFO ais.email_file transactional_email sent host=smtp.gmail.com to=dante12mk@gmail.com
+2026-04-11 20:04:31,419 INFO ais.email_file followup_email sent host=smtp.gmail.com to=anjali6@gmail.com

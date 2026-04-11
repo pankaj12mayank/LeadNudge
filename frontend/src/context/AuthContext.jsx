@@ -63,6 +63,24 @@ export function AuthProvider({ children }) {
     if (token) refreshProfile();
   }, [token, refreshProfile]);
 
+  /** Detect admin deactivation / plan expiry while the app is open (403 on /auth/me). */
+  useEffect(() => {
+    if (!token || role !== "user") return undefined;
+    const id = window.setInterval(() => {
+      refreshProfile().catch(() => {});
+    }, 45_000);
+    return () => window.clearInterval(id);
+  }, [token, role, refreshProfile]);
+
+  useEffect(() => {
+    if (!token || role !== "user") return undefined;
+    const onVis = () => {
+      if (document.visibilityState === "visible") refreshProfile().catch(() => {});
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [token, role, refreshProfile]);
+
   const login = useCallback(async (creds) => {
     setLoading(true);
     try {

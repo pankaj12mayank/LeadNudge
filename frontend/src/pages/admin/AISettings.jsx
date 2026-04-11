@@ -39,7 +39,6 @@ export default function AISettings() {
     error: null,
   });
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testingOllama, setTestingOllama] = useState(false);
@@ -234,7 +233,6 @@ export default function AISettings() {
   async function onSave(e) {
     e.preventDefault();
     setError("");
-    setSuccess("");
     setSaving(true);
     try {
       const payload = {
@@ -265,9 +263,16 @@ export default function AISettings() {
         savedOm ||
           pickOllamaDefault(om.env_default || siteOllamaModel, om.models),
       );
-      setSuccess("Saved.");
+      const ws = workspaces.find((w) => String(w.id) === String(workspaceId));
+      const wsName = ws ? workspaceLabel(ws.name) : "this workspace";
+      toast.success(`AI settings saved for «${wsName}»`, {
+        description:
+          "Generation source, model, and message cap are updated for that workspace.",
+      });
     } catch (err) {
-      setError(err.message);
+      const msg = err.message || "Could not save AI settings.";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -342,13 +347,8 @@ export default function AISettings() {
         ) : (
           <form onSubmit={onSave} className="max-w-xl space-y-5">
             {error && (
-              <p className="rounded-md border border-neutral-800 bg-neutral-100 px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100">
+              <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
                 {error}
-              </p>
-            )}
-            {success && (
-              <p className="rounded-md border border-neutral-400 bg-neutral-50 px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-200">
-                {success}
               </p>
             )}
             <div>

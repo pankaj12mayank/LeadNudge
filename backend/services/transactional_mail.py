@@ -48,7 +48,7 @@ def send_plain_email(
 
     to_clean = to_addr.strip()
     msg = EmailMessage()
-    msg["Subject"] = subject.strip()
+    msg["Subject"] = (subject or "").strip() or "(no subject)"
     msg["From"] = user
     msg["To"] = to_clean
 

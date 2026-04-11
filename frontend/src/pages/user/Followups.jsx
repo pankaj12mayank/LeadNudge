@@ -104,7 +104,7 @@ export default function Followups() {
   useEffect(() => {
     const id = setInterval(() => {
       loadFollowups();
-    }, 20000);
+    }, 45_000);
     return () => clearInterval(id);
   }, [loadFollowups]);
 

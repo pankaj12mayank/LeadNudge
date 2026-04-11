@@ -19,6 +19,7 @@ TEMPLATE_ACCOUNT_DEACTIVATED = "account_deactivated"
 TEMPLATE_PASSWORD_CHANGED = "password_changed"
 TEMPLATE_USAGE_LIMIT_REACHED = "usage_limit_reached"
 TEMPLATE_PLAN_EXPIRED = "plan_expired"
+TEMPLATE_PASSWORD_REQUEST_RECEIVED = "password_request_received"
 
 _DEFAULT_SUBJECTS_BODIES: list[tuple[str, str, str]] = [
     (
@@ -60,6 +61,13 @@ _DEFAULT_SUBJECTS_BODIES: list[tuple[str, str, str]] = [
         TEMPLATE_PLAN_EXPIRED,
         "Your plan has expired",
         "<p>Hi {{name}},</p><p>Your workspace plan for {{email}} has expired. Contact your administrator to renew access.</p>",
+    ),
+    (
+        TEMPLATE_PASSWORD_REQUEST_RECEIVED,
+        "We received your password help request",
+        "<p>Hi {{name}},</p><p>We received a request to help with sign-in for <strong>{{email}}</strong>.</p>"
+        "<p>An administrator will set a new password and notify you. If you did not ask for this, you can ignore this message.</p>"
+        "<p>— {{project_name}}</p>",
     ),
 ]
 
@@ -130,14 +138,23 @@ def send_template_email(
         raise ValueError("Transactional SMTP is not configured (Admin → Account & branding).")
     merged = dict(variables)
     merged.setdefault("project_name", (b.project_name or "").strip() or "Workspace")
-    subj = _strip_unresolved(render_placeholders(t.subject, merged))
+    subj = _strip_unresolved(render_placeholders(t.subject, merged)).strip() or "Notification"
     body = render_placeholders(t.body, merged)
+    to_clean = (to_email or "").strip()
     send_plain_email(
         b,
-        to_addr=(to_email or "").strip(),
+        to_addr=to_clean,
         subject=subj,
         body=body,
     )
+    try:
+        system_log_service.log_event(
+            db,
+            kind="EMAIL",
+            message=f"Template OK key={template_key} to={to_clean} subj={subj[:80]!r}",
+        )
+    except Exception:
+        pass
 
 
 def try_send_template(
@@ -156,7 +173,10 @@ def try_send_template(
             system_log_service.log_event(
                 db,
                 kind="EMAIL",
-                message=f"Template {template_key} failed to={to_clean}: {e!s}"[:8000],
+                message=(
+                    f"Template FAIL key={template_key} to={to_clean}: {e!s}. "
+                    "Check Admin → Account & branding SMTP."
+                )[:8000],
             )
         except Exception:
             pass

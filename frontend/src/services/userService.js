@@ -27,6 +27,11 @@ export async function deleteLead(id) {
   await api.delete(`/leads/${id}`);
 }
 
+export async function deleteLeadsBatch(ids) {
+  const { data } = await api.post("/leads/bulk-delete", { ids });
+  return data;
+}
+
 export async function importLeadsCsv(file, workspaceId) {
   const body = new FormData();
   body.append("file", file);

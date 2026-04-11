@@ -1,4 +1,5 @@
 from fastapi import HTTPException, status
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from core.security import hash_password, verify_password
@@ -15,12 +16,24 @@ def get_user(db: Session, user_id: int) -> User:
 
 def update_profile(db: Session, user_id: int, data: UserProfileUpdate) -> User:
     u = get_user(db, user_id)
+    changed = False
     if data.display_name is not None:
         u.display_name = data.display_name.strip() or None
+        changed = True
     if data.phone is not None:
         u.phone = data.phone.strip() or None
-    db.commit()
-    db.refresh(u)
+        changed = True
+    if not changed:
+        return u
+    try:
+        db.commit()
+        db.refresh(u)
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not save profile. Check your input and try again.",
+        ) from None
     return u
 
 

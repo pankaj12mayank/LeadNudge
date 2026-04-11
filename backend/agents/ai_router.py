@@ -394,19 +394,24 @@ def ai_router(
     ai_mode: str,
     api_key: str | None,
     ollama_model: str | None = None,
+    workspace_plan: str = "free",
 ) -> str:
     """
     Production path: never raises — returns draft text or FALLBACK_FOLLOWUP_BODY.
+    Free workspaces always use Ollama; OpenAI only when plan is pro and mode/key allow it.
     """
     force_local = (settings.mode or "local").strip().lower() == "local"
     if force_local:
         return run_ollama(prompt, model=ollama_model, raise_on_failure=False)
 
+    plan = (workspace_plan or "free").strip().lower()
+    allow_openai = plan == "pro"
+
     ws_key = (api_key or "").strip() or None
     env_key = (settings.openai_api_key or "").strip() or None
     effective_key = ws_key or env_key
 
-    if ai_mode == "api" and effective_key:
+    if allow_openai and ai_mode == "api" and effective_key:
         try:
             out = _run_openai(prompt, effective_key)
             if out:

@@ -13,6 +13,10 @@ class SettingsOut(BaseModel):
     smtp_port: int | None = None
     smtp_email: str | None = None
     smtp_password: str | None = None
+    followup_subject_template: str | None = None
+    followup_opening_line: str | None = None
+    followup_closing_template: str | None = None
+    followup_sender_display_name: str | None = None
     ai_messages_used: int = 0
     outbound_emails_sent: int = 0
     usage_percent: float = 0.0
@@ -30,6 +34,10 @@ class SettingsUpdate(BaseModel):
     smtp_port: int | None = Field(default=None, ge=1, le=65535)
     smtp_email: str | None = Field(default=None, max_length=255)
     smtp_password: str | None = None
+    followup_subject_template: str | None = Field(default=None, max_length=255)
+    followup_opening_line: str | None = Field(default=None, max_length=500)
+    followup_closing_template: str | None = Field(default=None, max_length=4000)
+    followup_sender_display_name: str | None = Field(default=None, max_length=120)
 
     @field_validator("smtp_email")
     @classmethod

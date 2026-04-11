@@ -57,6 +57,11 @@ def auth_me(
             detail="Invalid session",
         )
     u = user_profile_service.get_user(db, principal.user_id)
+    if not u.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account has been deactivated. Contact admin.",
+        )
     return MeOut(
         role="user",
         email=u.email,

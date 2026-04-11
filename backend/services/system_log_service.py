@@ -4,6 +4,8 @@ from math import ceil
 from sqlalchemy.orm import Session
 
 from models.system_log import SystemLog
+
+_MAX_BATCH_IDS = 500
 from schemas.system_admin import ActivityEntryOut, PaginatedActivity, SystemLogRowOut
 
 
@@ -103,3 +105,32 @@ def log_row_to_out(r: SystemLog) -> SystemLogRowOut:
         message=r.message[:8000],
         created_at=ts.isoformat(),
     )
+
+
+def delete_system_logs_by_ids(db: Session, ids: list[int]) -> int:
+    clean = sorted({i for i in ids if isinstance(i, int) and i > 0})[:_MAX_BATCH_IDS]
+    if not clean:
+        return 0
+    n = (
+        db.query(SystemLog)
+        .filter(SystemLog.id.in_(clean))
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return int(n)
+
+
+def delete_system_logs_for_calendar_month(db: Session, *, year: int, month: int) -> int:
+    """Delete all system_logs with created_at in [start, end) in UTC."""
+    start = datetime(year, month, 1, tzinfo=timezone.utc)
+    if month == 12:
+        end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+    else:
+        end = datetime(year, month + 1, 1, tzinfo=timezone.utc)
+    n = (
+        db.query(SystemLog)
+        .filter(SystemLog.created_at >= start, SystemLog.created_at < end)
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return int(n)

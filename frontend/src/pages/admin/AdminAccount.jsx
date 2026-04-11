@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import Card from "../../components/Card";
 import LogoUploadZone from "../../components/LogoUploadZone";
 import PasswordField from "../../components/PasswordField";
-import ResetEmailHtmlEditor from "../../components/ResetEmailHtmlEditor";
 import { useAuth } from "../../hooks/useAuth";
 import { useSite } from "../../context/SiteContext";
 import * as adminService from "../../services/adminService";
@@ -29,13 +28,13 @@ export default function AdminAccount() {
   const [smtpEmail, setSmtpEmail] = useState("");
   const [smtpPassword, setSmtpPassword] = useState("");
   const [hasSmtpSecret, setHasSmtpSecret] = useState(false);
-  const [resetSubject, setResetSubject] = useState("");
-  const [resetBody, setResetBody] = useState("");
   const [mailTestTo, setMailTestTo] = useState("");
 
   const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savedDisplayName, setSavedDisplayName] = useState("");
+  const [savedEmail, setSavedEmail] = useState("");
 
   async function load() {
     const [profile, branding, mail] = await Promise.all([
@@ -43,8 +42,12 @@ export default function AdminAccount() {
       adminService.getAdminBranding(),
       adminService.getBrandingMail(),
     ]);
-    setDisplayName(profile.display_name || "");
-    setEmail(profile.email);
+    const dn = profile.display_name || "";
+    const em = profile.email;
+    setDisplayName(dn);
+    setEmail(em);
+    setSavedDisplayName(dn);
+    setSavedEmail(em);
     setProjectName(branding.project_name);
     setLogoPreview(branding.logo_url);
     setFaviconPreview(branding.favicon_url);
@@ -58,8 +61,6 @@ export default function AdminAccount() {
     setSmtpEmail(mail.mail_smtp_email || "");
     setSmtpPassword("");
     setHasSmtpSecret(mail.mail_smtp_password === "***");
-    setResetSubject(mail.reset_email_subject || "");
-    setResetBody(mail.reset_email_body || "");
   }
 
   useEffect(() => {
@@ -78,8 +79,19 @@ export default function AdminAccount() {
     };
   }, []);
 
+  const profileDirty = useMemo(
+    () =>
+      displayName.trim() !== savedDisplayName.trim() ||
+      email.trim() !== savedEmail.trim(),
+    [displayName, email, savedDisplayName, savedEmail],
+  );
+
   async function saveProfile(e) {
     e.preventDefault();
+    if (!profileDirty) {
+      toast.message("No changes to save");
+      return;
+    }
     setSaving(true);
     try {
       const updated = await adminService.patchAdminMe({
@@ -87,6 +99,8 @@ export default function AdminAccount() {
         email: email.trim(),
       });
       setSessionEmail(updated.email);
+      setSavedDisplayName(displayName.trim());
+      setSavedEmail(email.trim());
       toast.success("Profile saved.");
     } catch (err) {
       toast.error(err.message);
@@ -183,8 +197,6 @@ export default function AdminAccount() {
         mail_smtp_host: smtpHost.trim() || null,
         mail_smtp_port: portNum,
         mail_smtp_email: smtpEmail.trim() || null,
-        reset_email_subject: resetSubject.trim() || null,
-        reset_email_body: resetBody || null,
       };
       if (smtpPassword.trim()) {
         payload.mail_smtp_password = smtpPassword.trim();
@@ -192,7 +204,7 @@ export default function AdminAccount() {
       const m = await adminService.putBrandingMail(payload);
       setSmtpPassword("");
       setHasSmtpSecret(m.mail_smtp_password === "***");
-      toast.success("Email settings saved.");
+      toast.success("SMTP settings saved.");
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -235,7 +247,8 @@ export default function AdminAccount() {
           Account, mail &amp; appearance
         </h1>
         <p className="mt-2 w-full text-sm text-neutral-600 dark:text-neutral-400">
-          Sign-in profile, product name, logo, favicon, and SMTP for password-reset emails.
+          Sign-in profile, product name, logo, favicon, and SMTP for transactional emails (templates
+          under Email templates).
         </p>
       </section>
 
@@ -268,7 +281,11 @@ export default function AdminAccount() {
               required
             />
           </div>
-          <button type="submit" disabled={saving} className="btn-primary w-full sm:w-auto">
+          <button
+            type="submit"
+            disabled={saving || !profileDirty}
+            className="btn-primary w-full sm:w-auto"
+          >
             Save profile
           </button>
         </form>
@@ -303,27 +320,31 @@ export default function AdminAccount() {
         </form>
       </Card>
 
-      <Card title="SMTP & password-reset email">
-        <form onSubmit={saveMail} className="max-w-2xl space-y-4">
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            Configure these to send “forgot password” links. In the body, use{" "}
-            <code className="rounded bg-neutral-100 px-1 text-xs dark:bg-neutral-800">
-              {"{{reset_link}}"}
-            </code>{" "}
-            for the reset URL and{" "}
-            <code className="rounded bg-neutral-100 px-1 text-xs dark:bg-neutral-800">
-              {"{{user_name}}"}
-            </code>{" "}
-            for the recipient&apos;s name (or email prefix).
-          </p>
-          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
-            <strong>Gmail:</strong> use <code className="text-xs">smtp.gmail.com</code>, port{" "}
-            <code className="text-xs">587</code>, and a Google{" "}
-            <strong>App password</strong> if 2-Step Verification is enabled (normal passwords return
-            error 534).
+      <Card title="Transactional email (SMTP)">
+        <form onSubmit={saveMail} className="max-w-2xl space-y-5">
+          <div className="space-y-2 text-sm text-neutral-600 dark:text-neutral-400">
+            <p>
+              Use this server to send <strong>automated emails from the app</strong> — for example
+              new-user welcome, password set by admin, password-help requests, and account
+              notifications. Subject and HTML for each type are managed under{" "}
+              <strong className="text-neutral-800 dark:text-neutral-200">Email templates</strong>{" "}
+              in the sidebar.
+            </p>
+            <p className="text-xs text-neutral-500 dark:text-neutral-500">
+              Until SMTP is filled in completely (host, port, sender, password where required),
+              those messages are skipped or logged; they are not queued.
+            </p>
+          </div>
+          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+            <strong>Gmail:</strong> <code className="text-[0.7rem]">smtp.gmail.com</code> · port{" "}
+            <code className="text-[0.7rem]">587</code> · use an{" "}
+            <strong>App password</strong> if 2-Step Verification is on.
           </p>
           <div>
-            <label className="form-label">Support email (shown to users)</label>
+            <label className="form-label">Support email (public)</label>
+            <p className="mb-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+              Shown on the sign-in page and in the UI as the contact address for end users.
+            </p>
             <input
               type="email"
               className="form-input"
@@ -333,79 +354,72 @@ export default function AdminAccount() {
               placeholder="support@yourcompany.com"
             />
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <label className="form-label">SMTP host</label>
-              <input
-                className="form-input"
-                value={smtpHost}
-                onChange={(e) => setSmtpHost(e.target.value)}
-                disabled={saving}
-                placeholder="smtp.example.com"
-              />
-            </div>
-            <div>
-              <label className="form-label">SMTP port</label>
-              <input
-                type="number"
-                className="form-input"
-                value={smtpPort}
-                onChange={(e) => setSmtpPort(e.target.value)}
-                disabled={saving}
-                placeholder="587"
-                min={1}
-                max={65535}
-              />
-            </div>
-            <div>
-              <label className="form-label">SMTP username / sender email</label>
-              <input
-                type="email"
-                className="form-input"
-                value={smtpEmail}
-                onChange={(e) => setSmtpEmail(e.target.value)}
-                disabled={saving}
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <PasswordField
-                label={
-                  hasSmtpSecret
-                    ? "SMTP password (leave blank to keep current)"
-                    : "SMTP password"
-                }
-                value={smtpPassword}
-                onChange={(e) => setSmtpPassword(e.target.value)}
-                disabled={saving}
-                autoComplete="new-password"
-              />
-            </div>
-          </div>
           <div>
-            <label className="form-label">Reset email subject</label>
-            <input
-              className="form-input"
-              value={resetSubject}
-              onChange={(e) => setResetSubject(e.target.value)}
-              disabled={saving}
-              placeholder="Reset your password"
-            />
-          </div>
-          <div>
-            <label className="form-label">Reset email body (HTML)</label>
-            <ResetEmailHtmlEditor
-              value={resetBody}
-              onChange={setResetBody}
-              disabled={saving}
-            />
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+              Outgoing mail server
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className="form-label">SMTP host</label>
+                <input
+                  className="form-input"
+                  value={smtpHost}
+                  onChange={(e) => setSmtpHost(e.target.value)}
+                  disabled={saving}
+                  placeholder="smtp.example.com"
+                />
+              </div>
+              <div>
+                <label className="form-label">Port</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={smtpPort}
+                  onChange={(e) => setSmtpPort(e.target.value)}
+                  disabled={saving}
+                  placeholder="587"
+                  min={1}
+                  max={65535}
+                />
+              </div>
+              <div>
+                <label className="form-label">Sender email (From)</label>
+                <input
+                  type="email"
+                  className="form-input"
+                  value={smtpEmail}
+                  onChange={(e) => setSmtpEmail(e.target.value)}
+                  disabled={saving}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <PasswordField
+                  label={
+                    hasSmtpSecret
+                      ? "SMTP password (leave blank to keep current)"
+                      : "SMTP password"
+                  }
+                  value={smtpPassword}
+                  onChange={(e) => setSmtpPassword(e.target.value)}
+                  disabled={saving}
+                  autoComplete="new-password"
+                />
+              </div>
+            </div>
           </div>
           <button type="submit" disabled={saving} className="btn-primary w-full sm:w-auto">
-            Save email settings
+            Save SMTP settings
           </button>
         </form>
-        <form onSubmit={sendTestMail} className="mt-6 flex max-w-2xl flex-col gap-3 border-t border-neutral-200 pt-6 dark:border-neutral-700 sm:flex-row sm:items-end">
+        <form
+          onSubmit={sendTestMail}
+          className="mt-6 flex max-w-2xl flex-col gap-3 border-t border-neutral-200 pt-6 dark:border-neutral-700 sm:flex-row sm:items-end"
+        >
           <div className="min-w-0 flex-1">
-            <label className="form-label">Send test email to</label>
+            <label className="form-label">Send test email</label>
+            <p className="mb-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+              Verifies host, port, and credentials — not a template preview.
+            </p>
             <input
               type="email"
               className="form-input"
@@ -416,7 +430,7 @@ export default function AdminAccount() {
             />
           </div>
           <button type="submit" disabled={saving} className="btn-secondary w-full shrink-0 sm:w-auto">
-            Test email
+            Send test
           </button>
         </form>
       </Card>

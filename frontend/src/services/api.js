@@ -35,6 +35,28 @@ api.interceptors.response.use(
   (err) => {
     const status = err.response?.status;
 
+    if (status === 403) {
+      const d = err.response?.data?.detail;
+      const msg = typeof d === "string" ? d : "";
+      const lower = msg.toLowerCase();
+      if (
+        lower.includes("deactivated") ||
+        lower.includes("plan has expired") ||
+        lower.includes("account is inactive")
+      ) {
+        clearSession();
+        if (!window.location.pathname.startsWith("/login")) {
+          toast.error(
+            msg.includes("plan")
+              ? "Your plan has expired. Contact your administrator."
+              : "Your account has been deactivated.",
+          );
+          window.location.replace("/login");
+        }
+        return Promise.reject(err);
+      }
+    }
+
     if (status === 401) {
       clearSession();
       if (!window.location.pathname.startsWith("/login")) {

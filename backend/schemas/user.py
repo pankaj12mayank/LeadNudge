@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class UserCreate(BaseModel):
@@ -30,6 +30,8 @@ class AdminUserPasswordSet(BaseModel):
 
 
 class UserProfileUpdate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     display_name: str | None = Field(default=None, max_length=120)
     phone: str | None = Field(default=None, max_length=64)
 

@@ -115,6 +115,14 @@ class LeadCsvImportResult(BaseModel):
     errors: list[str] = Field(default_factory=list)
 
 
+class LeadsBatchDeleteRequest(BaseModel):
+    ids: list[int] = Field(default_factory=list, max_length=500)
+
+
+class LeadsBatchDeleteOut(BaseModel):
+    deleted: int
+
+
 _EMOJI_RE = re.compile(
     "["
     "\U0001F300-\U0001F9FF"

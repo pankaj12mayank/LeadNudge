@@ -120,6 +120,29 @@ def delete_lead(
     db.commit()
 
 
+def delete_leads_batch(
+    db: Session,
+    ids: list[int],
+    *,
+    workspace_id: int | None,
+    is_admin: bool,
+) -> int:
+    """Delete up to 500 leads; workspace users only their workspace. ORM delete for cascades."""
+    clean = sorted({i for i in ids if isinstance(i, int) and i > 0})[:500]
+    if not clean:
+        return 0
+    q = db.query(Lead).filter(Lead.id.in_(clean))
+    if not is_admin:
+        if workspace_id is None:
+            return 0
+        q = q.filter(Lead.workspace_id == workspace_id)
+    rows = q.all()
+    for lead in rows:
+        db.delete(lead)
+    db.commit()
+    return len(rows)
+
+
 def import_leads_from_csv(
     db: Session,
     workspace_id: int,

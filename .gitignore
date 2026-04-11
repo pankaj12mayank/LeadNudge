@@ -1,2 +1,24 @@
 # Written at runtime so Vite proxy matches the backend (auto port)
 .backend-port
+
+# Local SQLite — recreated by the API; do not commit (avoids branch / merge pain)
+backend/app.db
+
+# Python bytecode — regenerated on every machine; never commit (not useful for clients)
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.so
+.venv/
+venv/
+env/
+
+# Node / frontend build
+frontend/node_modules/
+frontend/dist/
+
+# Env secrets (use .env.example in repo instead)
+backend/.env
+.env
+*.local

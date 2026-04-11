@@ -162,6 +162,9 @@ def update_workspace_plan(
     )
     if row:
         row.usage_limit = _usage_limit_for_plan(data.plan_type)
+        if data.plan_type == "free":
+            row.api_key = None
+            row.ai_mode = "local"
     db.commit()
     db.refresh(ws)
     return ws
@@ -171,16 +174,30 @@ def update_admin_settings(db: Session, data: AdminSettingsUpdate) -> WorkspaceSe
     ws = db.get(Workspace, data.workspace_id)
     if not ws or ws.name not in (FREE_WORKSPACE_NAME, PRO_WORKSPACE_NAME):
         raise HTTPException(status_code=404, detail="Workspace not found")
+    plan = (ws.plan_type or "free").lower()
     row = get_workspace_settings(db, data.workspace_id)
     if data.ai_mode is not None:
+        if plan != "pro" and data.ai_mode == "api":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="OpenAI (API) mode is only for the Pro workspace.",
+            )
         row.ai_mode = data.ai_mode
     if data.api_key is not None:
+        if plan != "pro" and (data.api_key or "").strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Workspace API keys are only allowed on the Pro workspace.",
+            )
         row.api_key = data.api_key or None
     if data.usage_limit is not None:
         row.usage_limit = data.usage_limit
     # Allow clearing workspace override with explicit null in JSON (PUT body).
     if "ollama_model" in data.model_fields_set:
         row.ollama_model = (data.ollama_model or "").strip() or None
+    if plan != "pro":
+        row.ai_mode = "local"
+        row.api_key = None
     db.commit()
     db.refresh(row)
     return row
@@ -250,7 +267,10 @@ def admin_set_user_password(db: Session, user_id: int, new_password: str) -> Use
         system_log_service.log_event(
             db,
             kind="SECURITY",
-            message=f"Admin set password user_id={user_id} email={u.email}"[:2000],
+            message=(
+                f"Admin set password user_id={user_id} email={u.email}; "
+                "password_changed email queued (see EMAIL logs for SMTP result)."
+            )[:2000],
         )
     except Exception:
         pass

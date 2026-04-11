@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, 
 from sqlalchemy.orm import Session
 
 from api.deps import Principal, require_admin
+from models.user import User
 from core.config import settings
 from core.paths import UPLOAD_DIR
 from db.session import get_db
@@ -30,6 +31,7 @@ from schemas.password_request import (
 from schemas.settings import AdminSettingsUpdate, SettingsOut
 from schemas.system_admin import (
     ActivityClearRequest,
+    DeletedCountOut,
     OllamaInstalledModelsOut,
     OllamaPullOut,
     OllamaPullRequest,
@@ -43,6 +45,8 @@ from schemas.system_admin import (
     PaginatedUserUsage,
     SentEmailRowOut,
     SentEmailsDeleteRequest,
+    SystemLogsClearMonthRequest,
+    SystemLogsDeleteRequest,
     SystemStatusOut,
 )
 from schemas.user import (
@@ -69,6 +73,29 @@ from utils.smtp_errors import format_smtp_error
 log = get_logger("admin")
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+def _guard_admin_vs_same_email_user(
+    db: Session,
+    principal: Principal,
+    target: User,
+    *,
+    patch: UserAdminPatch | None = None,
+    deleting: bool = False,
+) -> None:
+    """Block deactivating/deleting a workspace user whose email matches the logged-in admin."""
+    if principal.admin_id is None:
+        return
+    adm = admin_account_service.get_admin(db, principal.admin_id)
+    if not adm:
+        return
+    if (adm.email or "").strip().lower() != (target.email or "").strip().lower():
+        return
+    if deleting or (patch is not None and patch.is_active is not None):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You cannot modify your own admin access",
+        )
 
 
 def _branding_out(b) -> BrandingOut:
@@ -452,6 +479,28 @@ def admin_system_logs(
     )
 
 
+@router.post("/system-logs/delete", response_model=DeletedCountOut)
+def admin_system_logs_delete(
+    body: SystemLogsDeleteRequest,
+    _: Annotated[Principal, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> DeletedCountOut:
+    n = system_log_service.delete_system_logs_by_ids(db, list(body.ids))
+    return DeletedCountOut(deleted=n)
+
+
+@router.post("/system-logs/clear-month", response_model=DeletedCountOut)
+def admin_system_logs_clear_month(
+    body: SystemLogsClearMonthRequest,
+    _: Annotated[Principal, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> DeletedCountOut:
+    n = system_log_service.delete_system_logs_for_calendar_month(
+        db, year=body.year, month=body.month
+    )
+    return DeletedCountOut(deleted=n)
+
+
 @router.get("/sent-emails", response_model=PaginatedSentEmails)
 def admin_sent_emails(
     _: Annotated[Principal, Depends(require_admin)],
@@ -557,6 +606,22 @@ def admin_list_email_templates(
     return [EmailTemplateOut.model_validate(r) for r in rows]
 
 
+@router.get("/email-templates/{template_name}", response_model=EmailTemplateOut)
+def admin_get_email_template(
+    template_name: str,
+    _: Annotated[Principal, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> EmailTemplateOut:
+    template_mail_service.ensure_default_templates(db)
+    row = template_mail_service.get_template(db, template_name)
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Unknown template",
+        )
+    return EmailTemplateOut.model_validate(row)
+
+
 @router.put("/email-templates/{name}", response_model=EmailTemplateOut)
 def admin_put_email_template(
     name: str,
@@ -582,11 +647,24 @@ def admin_list_password_requests(
     db: Annotated[Session, Depends(get_db)],
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=30, ge=1, le=200),
+    q: str | None = Query(default=None, max_length=200),
+    status: str | None = Query(
+        default=None, description="pending | resolved"
+    ),
 ) -> PaginatedPasswordRequests:
+    if status is not None and status not in ("pending", "resolved"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="status must be pending or resolved",
+        )
     page = PaginationParams.clamp_page(page)
     limit = PaginationParams.clamp_limit(limit)
     rows, total = password_request_service.list_password_requests(
-        db, page=page, limit=limit
+        db,
+        page=page,
+        limit=limit,
+        q=q,
+        status_filter=status,
     )
     pages = max(1, ceil(total / limit)) if limit else 1
     return PaginatedPasswordRequests(
@@ -675,9 +753,13 @@ def list_users(
 def patch_user(
     user_id: int,
     body: UserAdminPatch,
-    _: Annotated[Principal, Depends(require_admin)],
+    principal: Annotated[Principal, Depends(require_admin)],
     db: Annotated[Session, Depends(get_db)],
 ) -> UserOut:
+    target = db.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    _guard_admin_vs_same_email_user(db, principal, target, patch=body)
     u = admin_service.patch_user(db, user_id, body)
     return UserOut.model_validate(u)
 
@@ -696,9 +778,13 @@ def admin_set_user_password(
 @router.delete("/users/{user_id}", status_code=204)
 def delete_user(
     user_id: int,
-    _: Annotated[Principal, Depends(require_admin)],
+    principal: Annotated[Principal, Depends(require_admin)],
     db: Annotated[Session, Depends(get_db)],
 ) -> None:
+    target = db.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    _guard_admin_vs_same_email_user(db, principal, target, deleting=True)
     admin_service.delete_user(db, user_id)
 
 

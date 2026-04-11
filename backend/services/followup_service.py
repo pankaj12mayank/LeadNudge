@@ -10,6 +10,7 @@ from agents.followup_agent import generate_followup
 from models.followup import Followup
 from models.lead import Lead
 from models.message import Message
+from models.workspace import Workspace
 from models.outbound_email import OutboundEmail
 from models.settings import WorkspaceSettings
 from schemas.followup import FollowupCreate, FollowupUpdate
@@ -75,6 +76,13 @@ def _recent_ai_followup_bodies(db: Session, lead_id: int, limit: int = 3) -> lis
 def _conversation_context_for_lead(
     db: Session, lead_id: int, exclude_followup_id: int
 ) -> str | None:
+    lead = db.get(Lead, lead_id)
+    chunks: list[str] = []
+    if lead and (lead.last_message or "").strip():
+        note = lead.last_message.strip()
+        chunks.append(
+            "Lead profile / last note (prioritize this to personalize the message):\n" + note[:4000]
+        )
     q = db.query(Message).filter(Message.lead_id == lead_id)
     q = q.filter(
         or_(
@@ -84,11 +92,18 @@ def _conversation_context_for_lead(
     )
     msg = q.order_by(Message.id.desc()).first()
     if msg and (msg.content or "").strip():
-        return msg.content.strip()
-    lead = db.get(Lead, lead_id)
-    if lead and (lead.last_message or "").strip():
-        return lead.last_message.strip()
-    return None
+        thread_text = msg.content.strip()
+        if not (
+            lead
+            and (lead.last_message or "").strip()
+            and thread_text == (lead.last_message or "").strip()
+        ):
+            chunks.append(
+                "Latest saved thread message (additional context):\n" + thread_text[:3500]
+            )
+    if not chunks:
+        return None
+    return "\n\n---\n\n".join(chunks)
 
 
 def followup_draft_content(db: Session, followup_id: int) -> str | None:
@@ -175,6 +190,8 @@ def _process_one_due_followup(db: Session, fu: Followup) -> None:
         return
 
     ws_id = lead.workspace_id
+    ws_row = db.get(Workspace, ws_id)
+    workspace_plan = (ws_row.plan_type if ws_row else "free") or "free"
     settings = _get_settings(db, ws_id)
     used = _workspace_message_count(db, ws_id)
     if used >= settings.usage_limit:
@@ -206,6 +223,7 @@ def _process_one_due_followup(db: Session, fu: Followup) -> None:
             last_context=ctx,
             previous_followup_bodies=prev_bodies,
             tone=tone,
+            workspace_plan=workspace_plan,
         )
     except Exception as e:
         fu.status = "ai_failed"
@@ -239,7 +257,9 @@ def _process_one_due_followup(db: Session, fu: Followup) -> None:
     smtp_ready = email_service.workspace_smtp_ready(settings)
     if smtp_ready:
         try:
-            subj, body_plain = email_service.format_followup_email(lead, content)
+            subj, body_plain = email_service.format_followup_email(
+                lead, content, settings
+            )
             email_service.send_followup_email(settings, lead, subj, body_plain)
             db.add(
                 OutboundEmail(

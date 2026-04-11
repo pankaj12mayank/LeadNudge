@@ -20,6 +20,7 @@ import Usage from "./pages/admin/Usage";
 import AdminLogs from "./pages/admin/AdminLogs";
 import PasswordRequests from "./pages/admin/PasswordRequests";
 import EmailTemplates from "./pages/admin/EmailTemplates";
+import EmailTemplateEdit from "./pages/admin/EmailTemplateEdit";
 import Dashboard from "./pages/user/Dashboard";
 import Leads from "./pages/user/Leads";
 import Followups from "./pages/user/Followups";
@@ -47,11 +48,20 @@ const NAV_TITLES = {
   "/profile": "Profile",
 };
 
+function headerTitle(pathname, variant) {
+  if (
+    pathname.startsWith("/admin/email-templates/") &&
+    pathname !== "/admin/email-templates"
+  ) {
+    return "Email template";
+  }
+  return NAV_TITLES[pathname] || (variant === "admin" ? "Admin" : "Workspace");
+}
+
 function Shell({ variant }) {
   const { pathname } = useLocation();
   const { site } = useSite();
-  const navTitle =
-    NAV_TITLES[pathname] || (variant === "admin" ? "Admin" : "Workspace");
+  const navTitle = headerTitle(pathname, variant);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const projectName = site?.project_name;
@@ -119,6 +129,10 @@ export default function App() {
           <Route path="/admin/users" element={<Users />} />
           <Route path="/admin/password-requests" element={<PasswordRequests />} />
           <Route path="/admin/email-templates" element={<EmailTemplates />} />
+          <Route
+            path="/admin/email-templates/:templateName"
+            element={<EmailTemplateEdit />}
+          />
           <Route path="/admin/ai-settings" element={<AISettings />} />
           <Route path="/admin/usage" element={<Usage />} />
           <Route path="/admin/logs" element={<AdminLogs />} />

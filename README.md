@@ -1,143 +1,175 @@
-# Sales Follow-up Console
+# AI Sales Agent — Sales follow-up console
 
-Single-repo SaaS-style app: **FastAPI** backend + **React (Vite)** admin and workspace-user portals, multi-tenant **workspaces**, **local-first AI** (Ollama) with optional OpenAI.
+Single-repo SaaS-style app: **FastAPI** backend, **React (Vite)** UI for **admin** and **workspace users**, multi-tenant **workspaces**, **local AI** via **Ollama**, and optional **OpenAI** for **Pro** plans.
 
-**Plans:** **Free** workspaces default to **200** AI-generated messages (cap); **Paid (Pro)** defaults to **10,000** — applied when a workspace is created or its plan changes (you can still override per workspace in AI configuration).
+**Documentation:** detailed setup → [`CLIENT_SETUP.md`](./CLIENT_SETUP.md) · plain-language steps → [`SIMPLE_START.md`](./SIMPLE_START.md)
 
-**Admin:** **Account & branding** in the UI updates your profile, password, product name, and logo (`/static/uploads/`). Public sign-in metadata: `GET /public/site` (no auth).
+## B2B model (sell to clients — user portal only)
 
-## Prerequisites
+Typical go-to-market:
 
-- **Python** 3.11+ (3.14+ supported; install deps with the same interpreter you use to run the API)
-- **Node.js** 18+ and npm
-- **Ollama** (for local AI): [https://ollama.com](https://ollama.com) — pull a model, e.g. `ollama pull llama3.2`
+- **You (vendor)** run the app on **your** infrastructure and keep **admin** access **only with you** — workspaces, billing logic (outside this repo if needed), SMTP, templates, user creation.
+- **Your B2B clients** get **only the workspace user experience**: you send them your **public URL** (ideally on a **cheap domain** you control) and **user** email/password from **Admin → Team**. They never need admin credentials and should not see admin menus (same app, different role after login).
+- **Scaling cost:** start with **one low-cost domain + one small VPS** (or static frontend + small API host); add capacity or separate instances per enterprise client as you grow.
+
+Details: [`CLIENT_SETUP.md`](./CLIENT_SETUP.md) (B2B + cheap hosting plan) and [`SIMPLE_START.md`](./SIMPLE_START.md) (who installs vs who only uses the browser).
+
+## Features
+
+- **Admin:** workspaces, team users, AI usage, logs, branding & SMTP, email templates, password-help queue, plan (Free/Pro) and workspace limits.
+- **Users:** leads, follow-ups, outbound mail history, email (workspace) settings, profile & password.
+- **AI:** Free workspaces always use **Ollama**. **Pro** workspaces may use **OpenAI** when server `MODE=api`, workspace AI mode is **API**, and a workspace or global API key is set.
+- **Security / ops:** JWT auth, admin cannot delete or deactivate their own matching workspace user, deactivated users get **403** on session check (forced logout in UI), transactional email logging (success/failure) and **system_logs** fallback on SMTP errors.
+- **One-click Windows start:** [`start.bat`](./start.bat) — backend, frontend, browser, Ollama check.
 
 ## Quick start (Windows)
 
-1. **Backend environment**
+1. **Backend:** Python 3.11+, `pip install -r backend/requirements.txt`, copy `backend/.env.example` → `backend/.env`, set `BOOTSTRAP_ADMIN_*` and `SECRET_KEY`.
+2. **Frontend:** Node 18+, `npm install` in `frontend/`, copy `frontend/.env.example` → `frontend/.env`.
+3. **Ollama:** install and `ollama pull` a model (match `OLLAMA_MODEL` in `backend/.env`).
+4. From repo root: run **`start.bat`**.
 
-   ```powershell
-   cd ai-sales-agent\backend
-   python -m venv ..\.venv
-   ..\.venv\Scripts\activate
-   pip install -r requirements.txt
-   copy .env.example .env
-   ```
-
-   Edit `backend\.env` (see [Configuration](#configuration)).
-
-2. **Frontend**
-
-   ```powershell
-   cd ..\frontend
-   npm install
-   copy .env.example .env
-   ```
-
-3. **One-click run**
-
-   From the repo root `ai-sales-agent\`:
-
-   ```text
-   start.bat
-   ```
-
-   This opens two windows: API (`run_dev.py`) and `npm run dev`. You can instead run them manually:
-
-   ```powershell
-   # Terminal 1 — backend (port from .env PORT / BACKEND_PORT)
-   cd backend
-   ..\.venv\Scripts\activate   # if you use a venv
-   python run_dev.py
-
-   # Terminal 2 — frontend (port from .env VITE_DEV_PORT)
-   cd frontend
-   npm run dev
-   ```
-
-4. **Open the app**
-
-   - UI: `http://localhost:5173` (or your `VITE_DEV_PORT`)
-   - API docs: `http://127.0.0.1:8000/docs` (or your `PORT`)
-
-## Default login credentials
-
-There is **no fixed password** in code. The first admin is created from **bootstrap** variables in `backend\.env`:
-
-| Variable | Example (`.env.example`) |
-|----------|-------------------------|
-| `BOOTSTRAP_ADMIN_EMAIL` | `admin@example.com` |
-| `BOOTSTRAP_ADMIN_PASSWORD` | `changeme` |
-
-Change these before any real use. After login as admin, create **workspaces** and **users** from the admin UI.
-
-Workspace users log in with the email/password you set when creating them.
+See [`CLIENT_SETUP.md`](./CLIENT_SETUP.md) for exact commands.
 
 ## Configuration
 
-### Backend (`backend\.env`)
+### Ports
+
+| Piece | Default | Where to change |
+|-------|---------|-----------------|
+| API | `8000` | `backend/.env`: `PORT` or `BACKEND_PORT`. `0` = auto-pick free port from 8000 (`run_prod.py` writes repo-root `.backend-port`). |
+| UI (dev) | `5173` | `frontend/.env`: `VITE_DEV_PORT` |
+| Ollama | `11434` | Ollama app / `OLLAMA_URL` in `backend/.env` |
+
+Repo root **`ports.env`** (optional) can override `BACKEND_PORT` for `start.bat` / `run_prod.py`.
+
+### Backend (`backend/.env`)
 
 | Variable | Purpose |
 |----------|---------|
 | `DATABASE_URL` | SQLite default `sqlite:///./app.db` |
-| `SECRET_KEY` | JWT signing secret |
-| `MODE` | `local` = **always Ollama** (no OpenAI). `api` = allow OpenAI when workspace AI mode + key |
-| `OLLAMA_URL` | Ollama base URL (e.g. `http://localhost:11434` or `http://127.0.0.1:11434`) |
-| `OLLAMA_MODEL` | Model name for `/api/generate` |
-| `OPENAI_API_KEY` | Optional global OpenAI key (workspace key still preferred when set) |
-| `PORT` or `BACKEND_PORT` | API port (default **8000**) |
-| `CORS_ORIGINS` | Extra allowed browser origins, comma-separated (defaults include `localhost:5173` and `127.0.0.1:5173`) |
-| `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` | Optional first admin |
+| `SECRET_KEY` | JWT signing secret (required in production) |
+| `MODE` | `local` = **always Ollama** (no OpenAI). `api` = OpenAI allowed only for **Pro** workspaces with API mode + key |
+| `OLLAMA_URL` | Ollama base URL |
+| `OLLAMA_MODEL` | Model name for generate/chat |
+| `OPENAI_API_KEY` | Optional global key; workspace key preferred when set |
+| `PORT` / `BACKEND_PORT` | API listen port |
+| `CORS_ORIGINS` | Extra browser origins, comma-separated |
+| `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` | First admin (change after install) |
 
-### Frontend (`frontend\.env`)
+### Frontend (`frontend/.env`)
 
 | Variable | Purpose |
 |----------|---------|
-| `VITE_API_URL` | Full backend origin, **no trailing path** (e.g. `http://localhost:8000`). Axios calls `/auth/...`, `/admin/...` on this host. |
-| `VITE_DEV_PORT` | Vite dev server port (default **5173**) |
-| `VITE_PROXY_TARGET` | Used only when `VITE_API_URL` is **unset**: dev proxy sends `/api` → this URL (default `http://127.0.0.1:8000`) |
+| `VITE_API_URL` | Backend origin, **no path** (e.g. `http://127.0.0.1:8000`). If unset in dev, Vite proxies `/api` → `VITE_PROXY_TARGET`. |
+| `VITE_DEV_PORT` | Dev server port |
+| `VITE_PROXY_TARGET` | Dev proxy target when `VITE_API_URL` is unset |
 
-### Changing ports
+### SMTP (transactional mail)
 
-- **Backend:** set `PORT` (or `BACKEND_PORT`) in `backend\.env`, then run `python run_dev.py` (or `start.bat`).
-- **Frontend:** set `VITE_DEV_PORT` in `frontend\.env`, then `npm run dev`.
-- If the UI runs on a **non-default** origin, add it to backend `CORS_ORIGINS` (comma-separated).
+Configure in **Admin → Account & branding** (stored in DB): host, port, from address, password. Used for:
 
-### Changing API URL (frontend)
+- New user / password changed / activation emails (DB **email templates**).
+- **Password request** acknowledgment when a user submits “request password help” on the login page.
 
-Set `VITE_API_URL` to your API origin, e.g. `http://localhost:8000` or `http://127.0.0.1:9000` if you change the API port.
+Failures are logged under **EMAIL** in system logs and sent-mail log where applicable.
 
-### Changing Ollama URL
+### Ollama
 
-Set `OLLAMA_URL` in `backend\.env` (same value as in Ollama’s listen address).
+1. Install Ollama and ensure `ollama serve` is running (or use the desktop app).
+2. `ollama pull <model>` matching `OLLAMA_MODEL`.
+3. Set `OLLAMA_URL` if not on localhost:11434.
 
-## AI behavior (summary)
+### OpenAI (Pro only)
 
-- **`MODE=local`:** only Ollama is used; workspace “API” mode does not call OpenAI.
-- **`MODE=api`:** if a workspace is set to API mode and a key exists (**workspace** or **`OPENAI_API_KEY`**), OpenAI is tried first; on failure, Ollama is used as fallback.
-- Ollama requests use **`OLLAMA_URL`** and **`OLLAMA_MODEL`**.
+1. Set `MODE=api` in `backend/.env`.
+2. Set workspace plan to **Pro** and workspace **AI mode** to **API** with a workspace API key and/or set `OPENAI_API_KEY` globally.
+
+## System flow
+
+### Admin flow
+
+1. Sign in with bootstrap admin credentials.
+2. **Branding:** SMTP, product name, logo — required for reliable transactional email.
+3. **Workspaces:** create workspace, set **Free** or **Pro**, optional expiry and usage caps.
+4. **Team:** create users; **Set password & notify** sends the `password_changed` template when SMTP works.
+5. **Password requests:** filter by email/status; resolve after helping the user.
+6. **Email templates:** card list → per-template page for subject + HTML body.
+
+### User flow
+
+1. Sign in with admin-created credentials.
+2. **Leads** → **Follow-ups** (AI drafts use Ollama on Free; Pro + API key may use OpenAI per rules above).
+3. **Profile** to update display name / phone; save is enabled only when something changed.
+4. If an admin deactivates the account, the next **`/auth/me`** check logs the user out with a clear message.
+
+## Deployment
+
+### Local / LAN
+
+- Backend: `python backend/run_dev.py` (reload) or `python backend/run_prod.py` (no reload, port file).
+- Frontend dev: `npm run dev` in `frontend/`.
+- Production UI: `npm run build` and serve `frontend/dist` with any static host; point API URL via env at build time or reverse-proxy `/api` to the FastAPI app.
+
+### Cheapest domain + host plan (B2B friendly)
+
+Good enough for **early sales** when each client only uses the **user portal**:
+
+1. **Domain:** budget registrar (promo TLDs often **~\$1–\$15/year** — shop around). Point DNS to your server or static host.
+2. **One small VPS** (e.g. Hetzner CX11-class, DO/Linode smallest) **or** split stack: **free/cheap static** frontend (Cloudflare Pages, Netlify, Vercel) + **small paid** API (Railway, Render, Fly, same VPS).
+3. **HTTPS:** Caddy automatic TLS, nginx + Certbot, or Cloudflare proxy — avoid plain HTTP for clients.
+4. **You** use **admin** on that deployment; **clients** only get links + **user** logins you create.
+
+See **[`CLIENT_SETUP.md`](./CLIENT_SETUP.md)** → sections *B2B plan* and *Cheap domain hosting plan* for a short checklist.
+
+### Cheap hosting options (typical pattern)
+
+- **VPS** (Hetzner, DigitalOcean, Linode, etc.): single small VM, run Uvicorn behind **Caddy** or **nginx**, SQLite or move to Postgres via `DATABASE_URL`.
+- **PaaS:** deploy API to **Railway**, **Render**, **Fly.io**; host static frontend on **Cloudflare Pages** / **Netlify** / **Vercel** with `VITE_API_URL` set to the public API origin.
+- **Ollama:** on Free plans, run Ollama on the same VPS or a machine on the LAN; set `OLLAMA_URL` accordingly. OpenAI is optional for Pro.
+
+Always set strong `SECRET_KEY`, HTTPS in production, and restrict `CORS_ORIGINS`.
+
+## Non-technical setup
+
+See **[`SIMPLE_START.md`](./SIMPLE_START.md)** (install Python, Node, Ollama → run `start.bat`).
 
 ## Project layout
 
 ```text
 ai-sales-agent/
-├── backend/          # FastAPI, SQLAlchemy, agents
-│   ├── run_dev.py    # Uvicorn with PORT from .env
-│   ├── start_backend.cmd
-│   └── .env
-├── frontend/         # React + Vite + Tailwind
-│   ├── start_frontend.cmd
-│   └── .env
-├── start.bat         # Windows: backend + frontend
+├── backend/           # FastAPI, SQLAlchemy, agents
+├── frontend/          # React + Vite + Tailwind
+├── start.bat          # Windows: backend + frontend + browser + Ollama check
+├── CLIENT_SETUP.md    # Detailed client setup
+├── SIMPLE_START.md    # Plain-language steps
 └── README.md
 ```
 
+## Testing
+
+From `backend/` (with venv activated):
+
+```bash
+pytest
+```
+
+Includes schema and AI routing plan checks.
+
 ## Troubleshooting
 
-- **`ModuleNotFoundError` (e.g. bcrypt):** install requirements with the **same** Python as `python run_dev.py`.
-- **CORS errors:** ensure the page origin is allowed (defaults cover `5173`; extend `CORS_ORIGINS`).
-- **401 / kicked to login:** JWT expired or invalid; sign in again. The app clears the token on 401.
-- **Network / cannot reach API:** confirm the backend is up and `VITE_API_URL` matches host/port (or use the Vite `/api` proxy by removing `VITE_API_URL`).
+- **ModuleNotFoundError:** install `requirements.txt` with the same Python you use to run the API.
+- **CORS:** add your UI origin to `CORS_ORIGINS`.
+- **401 / logout:** JWT expired or invalid.
+- **403 “deactivated”:** admin set the user inactive; sign-in again blocked until reactivated.
+- **No transactional email:** complete SMTP in **Branding**; check **Logs** for `EMAIL` entries.
+- **API port mismatch:** if `BACKEND_PORT=0`, read `.backend-port` or the backend window; align `VITE_API_URL` or proxy target.
+
+## Next scope (roadmap ideas)
+
+- **WhatsApp** integration for follow-up notifications and inbound leads.
+- **Payment gateway** and self-serve plan upgrades (Stripe, etc.).
+- **Multi-tenant SaaS hosting** hardening: Postgres, tenant isolation, horizontal API scaling, managed Ollama or cloud LLM routing.
 
 ## License
 

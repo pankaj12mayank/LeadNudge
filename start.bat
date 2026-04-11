@@ -21,6 +21,14 @@ if not defined SKIP_OLLAMA_AUTO (
 )
 
 echo.
+curl -s -m 3 http://127.0.0.1:11434/api/version >nul 2>&1
+if errorlevel 1 (
+  echo  Ollama: not reachable on port 11434 — local AI may not work until Ollama is running.
+) else (
+  echo  Ollama: OK on http://127.0.0.1:11434
+)
+
+echo.
 echo  [1/2] Opening BACKEND (minimized)...
 start /MIN "AI Sales - Backend" cmd /k "cd /d ""%BACKEND%"" && ""%PYEXE%"" run_prod.py"
 

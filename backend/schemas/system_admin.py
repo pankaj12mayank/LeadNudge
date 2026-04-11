@@ -118,3 +118,16 @@ class PaginatedSentEmails(BaseModel):
 
 class SentEmailsDeleteRequest(BaseModel):
     ids: list[int] = Field(default_factory=list, max_length=500)
+
+
+class SystemLogsDeleteRequest(BaseModel):
+    ids: list[int] = Field(default_factory=list, max_length=500)
+
+
+class SystemLogsClearMonthRequest(BaseModel):
+    year: int = Field(ge=2000, le=2100)
+    month: int = Field(ge=1, le=12)
+
+
+class DeletedCountOut(BaseModel):
+    deleted: int

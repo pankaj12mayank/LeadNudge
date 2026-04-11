@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import PhoneInput, { parsePhoneNumber } from "react-phone-number-input";
 import { toast } from "sonner";
 import "react-phone-number-input/style.css";
@@ -53,6 +53,16 @@ export default function Leads() {
   const [searchInput, setSearchInput] = useState("");
   const [searchQ, setSearchQ] = useState("");
   const [addOpen, setAddOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [batchDeleting, setBatchDeleting] = useState(false);
+
+  const idsOnPage = useMemo(
+    () => new Set(rows.map((r) => r.id)),
+    [rows],
+  );
+
+  const allOnPageSelected =
+    idsOnPage.size > 0 && [...idsOnPage].every((id) => selectedIds.has(id));
 
   function applyListPayload(data) {
     setRows(data.items ?? []);
@@ -86,6 +96,19 @@ export default function Leads() {
     };
   }, [page, limit, searchQ]);
 
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [page, searchQ]);
+
+  async function refreshList() {
+    const data = await userService.listLeads(undefined, {
+      page,
+      limit,
+      q: searchQ || undefined,
+    });
+    applyListPayload(data);
+  }
+
   async function onCreate(e) {
     e.preventDefault();
     if (!form.name.trim() || !form.email.trim()) {
@@ -112,12 +135,7 @@ export default function Leads() {
       setForm(emptyForm);
       setAddOpen(false);
       toast.success("Lead added successfully");
-      const data = await userService.listLeads(undefined, {
-        page,
-        limit,
-        q: searchQ || undefined,
-      });
-      applyListPayload(data);
+      await refreshList();
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -146,12 +164,7 @@ export default function Leads() {
       });
       setEditing(null);
       toast.success("Lead updated");
-      const data = await userService.listLeads(undefined, {
-        page,
-        limit,
-        q: searchQ || undefined,
-      });
-      applyListPayload(data);
+      await refreshList();
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -164,14 +177,39 @@ export default function Leads() {
     try {
       await userService.deleteLead(id);
       toast.success("Lead deleted");
-      const data = await userService.listLeads(undefined, {
-        page,
-        limit,
-        q: searchQ || undefined,
-      });
-      applyListPayload(data);
+      await refreshList();
+      setSelectedIds(new Set());
     } catch (err) {
       toast.error(err.message);
+    }
+  }
+
+  async function onDeleteSelected() {
+    const ids = [...selectedIds];
+    if (!ids.length) {
+      toast.warning("Select at least one lead.");
+      return;
+    }
+    if (
+      !confirm(
+        `Delete ${ids.length} lead(s)? Their follow-ups and message history will be removed too.`,
+      )
+    )
+      return;
+    setBatchDeleting(true);
+    try {
+      const { deleted } = await userService.deleteLeadsBatch(ids);
+      toast.success(
+        deleted
+          ? `Deleted ${deleted} lead(s).`
+          : "No matching leads to delete.",
+      );
+      setSelectedIds(new Set());
+      await refreshList();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setBatchDeleting(false);
     }
   }
 
@@ -193,12 +231,7 @@ export default function Leads() {
       if (r.errors?.length) {
         toast.warning(r.errors.slice(0, 3).join(" · "));
       }
-      const data = await userService.listLeads(undefined, {
-        page,
-        limit,
-        q: searchQ || undefined,
-      });
-      applyListPayload(data);
+      await refreshList();
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -215,7 +248,25 @@ export default function Leads() {
     }
   }
 
-  const columns = [
+  const columns = useMemo(
+    () => [
+    {
+      key: "_sel",
+      label: "",
+      render: (r) => (
+        <input
+          type="checkbox"
+          checked={selectedIds.has(r.id)}
+          onChange={(e) => {
+            const next = new Set(selectedIds);
+            if (e.target.checked) next.add(r.id);
+            else next.delete(r.id);
+            setSelectedIds(next);
+          }}
+          aria-label={`Select lead ${r.id}`}
+        />
+      ),
+    },
     { key: "id", label: "ID" },
     { key: "name", label: "Name" },
     { key: "email", label: "Email" },
@@ -286,7 +337,9 @@ export default function Leads() {
         </div>
       ),
     },
-  ];
+    ],
+    [selectedIds],
+  );
 
   return (
     <div className="w-full space-y-8 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -620,6 +673,30 @@ export default function Leads() {
               Clear
             </button>
           </div>
+        </div>
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <button
+            type="button"
+            className="btn-secondary inline-flex h-10 w-full items-center justify-center text-sm sm:w-auto sm:min-w-[11rem]"
+            disabled={loading || listLoading || idsOnPage.size === 0}
+            onClick={() => {
+              if (allOnPageSelected) setSelectedIds(new Set());
+              else setSelectedIds(new Set(idsOnPage));
+            }}
+          >
+            {allOnPageSelected ? "Clear page selection" : "Select all on page"}
+          </button>
+          <button
+            type="button"
+            className="inline-flex h-10 w-full items-center justify-center rounded-md border border-red-400 bg-red-100 px-4 text-sm font-medium text-red-950 hover:bg-red-200 disabled:opacity-50 dark:border-red-800 dark:bg-red-950/50 dark:text-red-100 dark:hover:bg-red-950/80 sm:w-auto"
+            disabled={batchDeleting || selectedIds.size === 0}
+            onClick={onDeleteSelected}
+          >
+            Delete selected ({selectedIds.size})
+          </button>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400 sm:ml-1">
+            Up to 500 per action. Deletes follow-ups and messages for those leads.
+          </p>
         </div>
         {loading ? (
           <p className="text-neutral-500 dark:text-neutral-400">Loading…</p>

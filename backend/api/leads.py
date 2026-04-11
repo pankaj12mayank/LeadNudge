@@ -6,7 +6,15 @@ from sqlalchemy.orm import Session
 
 from api.deps import Principal, get_principal
 from db.session import get_db
-from schemas.lead import LeadCreate, LeadCsvImportResult, LeadOut, LeadUpdate, PaginatedLeads
+from schemas.lead import (
+    LeadCreate,
+    LeadCsvImportResult,
+    LeadOut,
+    LeadsBatchDeleteOut,
+    LeadsBatchDeleteRequest,
+    LeadUpdate,
+    PaginatedLeads,
+)
 from services import lead_service
 
 router = APIRouter(prefix="/leads", tags=["leads"])
@@ -35,6 +43,39 @@ def download_csv_sample(
             "Content-Disposition": 'attachment; filename="leads_sample.csv"',
         },
     )
+
+
+def _leads_batch_delete_handler(
+    body: LeadsBatchDeleteRequest,
+    principal: Principal,
+    db: Session,
+) -> LeadsBatchDeleteOut:
+    n = lead_service.delete_leads_batch(
+        db,
+        list(body.ids),
+        workspace_id=principal.workspace_id,
+        is_admin=principal.role == "admin",
+    )
+    return LeadsBatchDeleteOut(deleted=n)
+
+
+@router.post("/bulk-delete", response_model=LeadsBatchDeleteOut)
+def delete_leads_bulk_delete(
+    body: LeadsBatchDeleteRequest,
+    principal: Annotated[Principal, Depends(get_principal)],
+    db: Annotated[Session, Depends(get_db)],
+) -> LeadsBatchDeleteOut:
+    """Bulk delete (preferred path; avoids some proxies blocking paths with multiple segments)."""
+    return _leads_batch_delete_handler(body, principal, db)
+
+
+@router.post("/batch-delete", response_model=LeadsBatchDeleteOut)
+def delete_leads_batch_delete(
+    body: LeadsBatchDeleteRequest,
+    principal: Annotated[Principal, Depends(get_principal)],
+    db: Annotated[Session, Depends(get_db)],
+) -> LeadsBatchDeleteOut:
+    return _leads_batch_delete_handler(body, principal, db)
 
 
 @router.get("", response_model=PaginatedLeads)

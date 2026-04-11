@@ -8,6 +8,27 @@ from email.message import EmailMessage
 from core.paths import BACKEND_ROOT
 from models.lead import Lead
 from models.settings import WorkspaceSettings
+
+
+def _followup_template_vars(lead: Lead, settings_row: WorkspaceSettings) -> dict[str, str]:
+    sender = (settings_row.followup_sender_display_name or "").strip()
+    if not sender:
+        em = (settings_row.smtp_email or "").strip()
+        sender = em.split("@")[0].replace(".", " ").title() if em else "Team"
+    smtp_em = (settings_row.smtp_email or "").strip()
+    return {
+        "lead_name": ((lead.name or "").strip() or "there"),
+        "lead_email": (lead.email or "").strip(),
+        "sender_name": sender,
+        "sender_email": smtp_em,
+    }
+
+
+def _apply_followup_placeholders(template: str, vars_map: dict[str, str]) -> str:
+    out = template
+    for key, val in vars_map.items():
+        out = out.replace("{{" + key + "}}", val)
+    return out
 from utils.logger import get_logger
 
 log = get_logger("email")
@@ -79,9 +100,8 @@ def _plain_body_to_html_fragment(plain: str) -> str:
     return "".join(parts)
 
 
-def build_followup_html(lead: Lead, body_plain: str) -> str:
-    """Readable HTML (serif stack); plain text remains the canonical body."""
-    safe_name = html.escape(lead.name or "there")
+def build_followup_html(body_plain: str) -> str:
+    """Readable HTML wrapper; plain body already includes greeting + signature."""
     inner = _plain_body_to_html_fragment(body_plain)
     return (
         "<!DOCTYPE html><html><body "
@@ -90,23 +110,42 @@ def build_followup_html(lead: Lead, body_plain: str) -> str:
         "padding:28px 32px;border-radius:8px;"
         'border:1px solid #e5e5e5;font-family:Georgia,\"Times New Roman\",serif;'
         'font-size:16px;line-height:1.55;color:#1a1a1a;">'
-        f"<p style=\"margin:0 0 1em 0;\">Hi {safe_name},</p>"
         f"{inner}"
-        '<p style="margin:1.5em 0 0 0;">Best regards</p>'
         "</div></body></html>"
     )
 
 
-def format_followup_email(lead: Lead, ai_message: str) -> tuple[str, str]:
-    subject = f"Follow-up — {lead.name}"
-    body = _clean_body(ai_message)
-    if not body:
-        body = (
-            f"Hello {lead.name},\n\n"
-            "I wanted to follow up with you. Please let me know a convenient time to connect.\n\n"
-            "Best regards"
+def format_followup_email(
+    lead: Lead,
+    ai_message: str,
+    settings_row: WorkspaceSettings,
+) -> tuple[str, str]:
+    vm = _followup_template_vars(lead, settings_row)
+    subj_tpl = (settings_row.followup_subject_template or "").strip()
+    if not subj_tpl:
+        subj_tpl = "Following up — {{lead_name}}"
+    subject = _apply_followup_placeholders(subj_tpl, vm).strip() or (
+        f"Following up — {vm['lead_name']}"
+    )
+
+    opening_tpl = (settings_row.followup_opening_line or "").strip()
+    if not opening_tpl:
+        opening_tpl = "Hi {{lead_name}},"
+    opening = _apply_followup_placeholders(opening_tpl, vm).strip()
+
+    closing_tpl = (settings_row.followup_closing_template or "").strip()
+    if not closing_tpl:
+        closing_tpl = "Best regards,\n{{sender_name}}"
+    closing = _apply_followup_placeholders(closing_tpl, vm).strip()
+
+    body_mid = _clean_body(ai_message)
+    if not body_mid:
+        body_mid = (
+            "I wanted to follow up and see if you had any questions or a good time to reconnect."
         )
-    return subject, body
+
+    body_plain = f"{opening}\n\n{body_mid}\n\n{closing}".strip()
+    return subject, body_plain
 
 
 def send_followup_email(
@@ -135,7 +174,7 @@ def send_followup_email(
     msg["To"] = to_addr
     msg.set_content(body_plain)
     msg.add_alternative(
-        build_followup_html(lead, body_plain),
+        build_followup_html(body_plain),
         subtype="html",
     )
 
