@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24
     ollama_base_url: str = Field(
-        default="http://127.0.0.1:11434",
+        default="http://localhost:11434",
         validation_alias=AliasChoices(
             "OLLAMA_URL",
             "OLLAMA_BASE_URL",

@@ -8,15 +8,29 @@ import {
   workspaceLabel,
 } from "../../utils/workspaceLabel";
 
+function isoToDatetimeLocal(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const t = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return t.toISOString().slice(0, 16);
+}
+
 export default function Workspaces() {
   const [rows, setRows] = useState([]);
   const [pending, setPending] = useState({});
+  const [expiryById, setExpiryById] = useState({});
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState(null);
 
   async function refresh() {
     const data = await adminService.listWorkspaces();
     setRows(data);
+    const m = {};
+    (data || []).forEach((r) => {
+      m[r.id] = isoToDatetimeLocal(r.plan_expires_at);
+    });
+    setExpiryById(m);
   }
 
   useEffect(() => {
@@ -39,7 +53,13 @@ export default function Workspaces() {
   async function savePlan(workspaceId, planType) {
     setSavingId(workspaceId);
     try {
-      await adminService.updateWorkspacePlan(workspaceId, planType);
+      const local = expiryById[workspaceId];
+      let planExpiresAt = null;
+      if (local && local.trim()) {
+        const d = new Date(local);
+        if (!Number.isNaN(d.getTime())) planExpiresAt = d.toISOString();
+      }
+      await adminService.updateWorkspacePlan(workspaceId, planType, planExpiresAt);
       toast.success("Plan updated for this workspace.");
       setPending((p) => ({ ...p, [workspaceId]: undefined }));
       await refresh();
@@ -122,6 +142,25 @@ export default function Workspaces() {
                         You changed the plan — press <strong>Save plan</strong> to apply.
                       </p>
                     ) : null}
+                  </div>
+                  <div className="border-t border-neutral-200 pt-4 dark:border-neutral-700">
+                    <p className="form-label">Plan end (optional)</p>
+                    <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                      After this date (UTC stored), users in this workspace cannot sign in until you
+                      extend the date or clear it. Uses device local time below.
+                    </p>
+                    <input
+                      type="datetime-local"
+                      className="form-input mt-2 w-full max-w-md"
+                      value={expiryById[r.id] ?? ""}
+                      disabled={savingId === r.id}
+                      onChange={(e) =>
+                        setExpiryById((prev) => ({
+                          ...prev,
+                          [r.id]: e.target.value,
+                        }))
+                      }
+                    />
                   </div>
                 </div>
               </Card>

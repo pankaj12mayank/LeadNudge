@@ -60,6 +60,22 @@ export async function createFollowup(payload) {
   return data;
 }
 
+export async function listOutboundMails({ page = 1, limit = 50, q } = {}) {
+  const params = { page, limit };
+  if (q) params.q = q;
+  const { data } = await api.get("/outbound-mails", { params });
+  return data;
+}
+
+export async function deleteFollowup(id) {
+  await api.delete(`/followups/${id}`);
+}
+
+export async function patchFollowup(id, payload) {
+  const { data } = await api.patch(`/followups/${id}`, payload);
+  return data;
+}
+
 export async function getSettings(workspaceId) {
   const params =
     workspaceId != null ? { workspace_id: workspaceId } : undefined;

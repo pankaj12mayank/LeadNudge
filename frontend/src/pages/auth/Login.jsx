@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import ThemeToggle from "../../components/ThemeToggle";
 import Card from "../../components/Card";
@@ -7,6 +7,7 @@ import PasswordField from "../../components/PasswordField";
 import { useAuth } from "../../hooks/useAuth";
 import { useSite } from "../../context/SiteContext";
 import { mediaUrl } from "../../utils/mediaUrl";
+import * as authService from "../../services/authService";
 
 function brandInitials(name) {
   const t = (name || "").trim();
@@ -27,6 +28,9 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [reqOpen, setReqOpen] = useState(false);
+  const [reqEmail, setReqEmail] = useState("");
+  const [reqSending, setReqSending] = useState(false);
 
   const title = site?.project_name || "Sales Follow-up Console";
   const logoSrc = mediaUrl(site?.logo_url);
@@ -164,15 +168,75 @@ export default function Login() {
               {submitting ? "Signing in…" : "Sign in"}
             </button>
             <p className="text-center text-sm">
-              <Link
-                to="/forgot-password"
+              <button
+                type="button"
                 className="font-medium text-neutral-900 underline decoration-neutral-400 underline-offset-2 dark:text-neutral-100"
+                onClick={() => {
+                  setReqEmail(email.trim());
+                  setReqOpen(true);
+                }}
               >
-                Forgot password?
-              </Link>
+                Request password reset
+              </button>
             </p>
           </form>
         </Card>
+
+        {reqOpen ? (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pw-req-title"
+          >
+            <Card title="Request password help" className="relative z-10 w-full max-w-md shadow-xl">
+              <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                Enter your work email. An administrator will set a new password and you will receive
+                login instructions by email when SMTP is configured.
+              </p>
+              <div className="mt-4">
+                <label className="form-label">Work email</label>
+                <input
+                  type="email"
+                  className="form-input w-full"
+                  value={reqEmail}
+                  onChange={(e) => setReqEmail(e.target.value)}
+                  disabled={reqSending}
+                  autoComplete="email"
+                />
+              </div>
+              <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  className="btn-secondary w-full sm:w-auto"
+                  disabled={reqSending}
+                  onClick={() => setReqOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary w-full sm:w-auto"
+                  disabled={reqSending || !reqEmail.trim()}
+                  onClick={async () => {
+                    setReqSending(true);
+                    try {
+                      await authService.requestPasswordResetFromAdmin(reqEmail.trim());
+                      toast.success("Your request has been sent to the admin.");
+                      setReqOpen(false);
+                    } catch (e) {
+                      toast.error(e.message || "Could not submit request.");
+                    } finally {
+                      setReqSending(false);
+                    }
+                  }}
+                >
+                  {reqSending ? "Sending…" : "Submit request"}
+                </button>
+              </div>
+            </Card>
+          </div>
+        ) : null}
       </div>
     </div>
   );

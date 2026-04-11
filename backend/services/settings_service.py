@@ -2,11 +2,42 @@ import smtplib
 import ssl
 
 from fastapi import HTTPException, status
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from models.lead import Lead
+from models.message import Message
+from models.outbound_email import OutboundEmail
 from models.settings import WorkspaceSettings
 from schemas.settings import SettingsOut, SettingsUpdate
 from utils.smtp_errors import format_smtp_error
+
+
+def _workspace_ai_message_count(db: Session, workspace_id: int) -> int:
+    stmt = (
+        select(func.count())
+        .select_from(Message)
+        .join(Lead, Message.lead_id == Lead.id)
+        .where(Lead.workspace_id == workspace_id)
+    )
+    return int(db.execute(stmt).scalar_one())
+
+
+def _workspace_outbound_count(db: Session, workspace_id: int) -> int:
+    stmt = (
+        select(func.count())
+        .select_from(OutboundEmail)
+        .where(OutboundEmail.workspace_id == workspace_id)
+    )
+    return int(db.execute(stmt).scalar_one())
+
+
+def _smtp_configured(row: WorkspaceSettings) -> bool:
+    return bool(
+        (row.smtp_host or "").strip()
+        and (row.smtp_email or "").strip()
+        and row.smtp_port is not None
+    )
 
 
 def get_settings_out(
@@ -31,6 +62,12 @@ def get_settings_out(
     elif row.smtp_password:
         smtp_pw = "***"
 
+    used = _workspace_ai_message_count(db, workspace_id)
+    lim = max(0, int(row.usage_limit or 0))
+    outbound_n = _workspace_outbound_count(db, workspace_id)
+    pct = (100.0 * used / lim) if lim > 0 else 0.0
+    near = lim > 0 and used >= int(lim * 0.9 + 0.9999) and used < lim
+
     return SettingsOut(
         workspace_id=row.workspace_id,
         ai_mode=row.ai_mode,
@@ -41,14 +78,11 @@ def get_settings_out(
         smtp_port=row.smtp_port,
         smtp_email=row.smtp_email,
         smtp_password=smtp_pw,
-    )
-
-
-def _smtp_configured(row: WorkspaceSettings) -> bool:
-    return bool(
-        (row.smtp_host or "").strip()
-        and (row.smtp_email or "").strip()
-        and row.smtp_port is not None
+        ai_messages_used=used,
+        outbound_emails_sent=outbound_n,
+        usage_percent=round(pct, 2),
+        usage_near_limit=near,
+        smtp_fully_configured=_smtp_configured(row),
     )
 
 
@@ -88,8 +122,8 @@ def update_user_settings(
             row.smtp_port = data.smtp_port
         if data.smtp_email is not None:
             row.smtp_email = str(data.smtp_email).strip()
-        if data.smtp_password is not None:
-            row.smtp_password = data.smtp_password or None
+        if data.smtp_password is not None and str(data.smtp_password).strip():
+            row.smtp_password = str(data.smtp_password).strip()
         if not _smtp_configured(row):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

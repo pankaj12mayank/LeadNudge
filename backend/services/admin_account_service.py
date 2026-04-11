@@ -57,8 +57,8 @@ def apply_branding_mail_settings(db: Session, data: BrandingMailUpdate) -> AppBr
         b.mail_smtp_port = data.mail_smtp_port
     if data.mail_smtp_email is not None:
         b.mail_smtp_email = (data.mail_smtp_email or "").strip() or None
-    if data.mail_smtp_password is not None:
-        b.mail_smtp_password = data.mail_smtp_password or None
+    if data.mail_smtp_password is not None and str(data.mail_smtp_password).strip():
+        b.mail_smtp_password = str(data.mail_smtp_password).strip()
     if data.reset_email_subject is not None:
         b.reset_email_subject = (data.reset_email_subject or "").strip() or None
     if data.reset_email_body is not None:

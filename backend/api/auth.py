@@ -1,20 +1,18 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from api.deps import Principal, get_principal
 from db.session import get_db
-from schemas.auth import (
-    ForgotPasswordRequest,
-    LoginRequest,
-    MeOut,
-    ResetPasswordRequest,
-    TokenResponse,
-)
+from schemas.auth import LoginRequest, MeOut, TokenResponse
+from schemas.password_request import PasswordRequestCreate
 from services import admin_account_service, auth_service
-from services import password_reset_service
+from services import password_request_service
 from services import user_profile_service
+from utils.logger import get_logger
+
+log = get_logger("auth")
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -28,25 +26,16 @@ def login(
     return TokenResponse(**data)
 
 
-@router.post("/forgot-password", status_code=204)
-def forgot_password(
-    body: ForgotPasswordRequest,
+@router.post("/password-request", status_code=204)
+def submit_password_request(
+    body: PasswordRequestCreate,
     db: Annotated[Session, Depends(get_db)],
 ) -> None:
+    """User asks admin for a new password (no token / self-serve reset)."""
     try:
-        password_reset_service.request_password_reset(db, body.email)
-    except HTTPException:
-        raise
-
-
-@router.post("/reset-password", status_code=204)
-def reset_password(
-    body: ResetPasswordRequest,
-    db: Annotated[Session, Depends(get_db)],
-) -> None:
-    password_reset_service.reset_password_with_token(
-        db, body.token, body.new_password
-    )
+        password_request_service.submit_password_request(db, str(body.email))
+    except Exception as e:
+        log.exception("password-request failed: %s", e)
 
 
 @router.get("/me", response_model=MeOut)

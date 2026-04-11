@@ -5,6 +5,7 @@ import Card from "../../components/Card";
 import Table from "../../components/Table";
 import Badge from "../../components/Badge";
 import PaginationBar from "../../components/PaginationBar";
+import { useSite } from "../../context/SiteContext";
 import * as userService from "../../services/userService";
 
 const leadColumns = [
@@ -30,8 +31,14 @@ const leadColumns = [
 ];
 
 export default function Dashboard() {
+  const { site } = useSite();
+  const supportEmail = site?.support_email;
   const [leads, setLeads] = useState(0);
   const [followups, setFollowups] = useState(0);
+  const [outboundSent, setOutboundSent] = useState(0);
+  const [usageUsed, setUsageUsed] = useState(0);
+  const [usageLimit, setUsageLimit] = useState(0);
+  const [usageNear, setUsageNear] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const [dashPage, setDashPage] = useState(1);
@@ -47,13 +54,18 @@ export default function Dashboard() {
     let c = false;
     (async () => {
       try {
-        const [l, f] = await Promise.all([
+        const [l, f, s] = await Promise.all([
           userService.listLeads(undefined, { page: 1, limit: 1 }),
           userService.listFollowups(undefined, { page: 1, limit: 1 }),
+          userService.getSettings(),
         ]);
         if (!c) {
           setLeads(l.total ?? 0);
           setFollowups(f.total ?? 0);
+          setOutboundSent(s.outbound_emails_sent ?? 0);
+          setUsageUsed(s.ai_messages_used ?? 0);
+          setUsageLimit(s.usage_limit ?? 0);
+          setUsageNear(Boolean(s.usage_near_limit));
         }
       } catch (e) {
         if (!c) toast.error(e.message);
@@ -64,6 +76,21 @@ export default function Dashboard() {
     return () => {
       c = true;
     };
+  }, []);
+
+  useEffect(() => {
+    const id = setInterval(async () => {
+      try {
+        const s = await userService.getSettings();
+        setOutboundSent(s.outbound_emails_sent ?? 0);
+        setUsageUsed(s.ai_messages_used ?? 0);
+        setUsageLimit(s.usage_limit ?? 0);
+        setUsageNear(Boolean(s.usage_near_limit));
+      } catch {
+        /* ignore */
+      }
+    }, 35000);
+    return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
@@ -102,14 +129,35 @@ export default function Dashboard() {
           Workspace snapshot
         </h1>
         <p className="mt-2 w-full text-sm text-neutral-600 dark:text-neutral-400">
-          Totals reflect your workspace only. Schedule follow-ups from the Follow-ups page; each
-          run may generate a draft message for your review. Usage limits apply per your plan.
+          Totals reflect your workspace only. Follow-ups run at the time you schedule; with SMTP
+          configured the app can email the lead and log the send here. AI drafts count toward your
+          plan limit.
         </p>
       </section>
+      {usageNear && usageLimit > 0 ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
+          <p className="font-medium">You are reaching your limit. Upgrade plan.</p>
+          <p className="mt-1">
+            About {Math.min(100, Math.round((usageUsed / usageLimit) * 100))}% of your workspace AI
+            allowance is used ({usageUsed} / {usageLimit}). Contact
+            {supportEmail ? (
+              <>
+                {" "}
+                <a className="font-medium underline" href={`mailto:${supportEmail}`}>
+                  support
+                </a>
+              </>
+            ) : (
+              " support"
+            )}{" "}
+            so an admin can raise your cap.
+          </p>
+        </div>
+      ) : null}
       {loading ? (
         <p className="text-neutral-500 dark:text-neutral-400">Loading…</p>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card noBodyPadding>
             <div className="p-6">
               <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
@@ -127,6 +175,32 @@ export default function Dashboard() {
               </p>
               <p className="mt-2 text-3xl font-semibold tabular-nums text-neutral-900 dark:text-neutral-100">
                 {followups}
+              </p>
+            </div>
+          </Card>
+          <Card noBodyPadding>
+            <div className="p-6">
+              <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
+                Emails sent (SMTP)
+              </p>
+              <p className="mt-2 text-3xl font-semibold tabular-nums text-neutral-900 dark:text-neutral-100">
+                {outboundSent}
+              </p>
+              <Link
+                to="/sent-mails"
+                className="mt-2 inline-block text-xs font-medium text-neutral-600 underline dark:text-neutral-400"
+              >
+                View log
+              </Link>
+            </div>
+          </Card>
+          <Card noBodyPadding>
+            <div className="p-6">
+              <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
+                AI messages used
+              </p>
+              <p className="mt-2 text-3xl font-semibold tabular-nums text-neutral-900 dark:text-neutral-100">
+                {usageLimit > 0 ? `${usageUsed} / ${usageLimit}` : usageUsed}
               </p>
             </div>
           </Card>

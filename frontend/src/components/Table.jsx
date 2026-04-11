@@ -26,7 +26,10 @@ export default function Table({ columns, rows, emptyText = "No data" }) {
           {rows.map((row, i) => (
             <tr key={row.id ?? i} className="hover:bg-neutral-50 dark:hover:bg-neutral-900/50">
               {columns.map((col) => (
-                <td key={col.key} className="px-4 py-3 text-neutral-700 dark:text-neutral-300">
+                <td
+                  key={col.key}
+                  className="align-top px-4 py-3 text-neutral-700 dark:text-neutral-300"
+                >
                   {col.render ? col.render(row) : row[col.key]}
                 </td>
               ))}

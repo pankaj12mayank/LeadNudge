@@ -51,6 +51,7 @@ def list_leads(
 
 
 def create_lead(db: Session, workspace_id: int, data: LeadCreate) -> Lead:
+    lm = (data.last_message or "").strip() or None
     lead = Lead(
         name=data.name,
         email=data.email,
@@ -58,6 +59,7 @@ def create_lead(db: Session, workspace_id: int, data: LeadCreate) -> Lead:
         tag=data.tag,
         phone_number=data.phone_number,
         country_code=data.country_code,
+        last_message=lm,
         workspace_id=workspace_id,
     )
     db.add(lead)
@@ -93,6 +95,8 @@ def update_lead(
         lead.phone_number = data.phone_number
     if data.country_code is not None:
         lead.country_code = data.country_code
+    if data.last_message is not None:
+        lead.last_message = (data.last_message or "").strip() or None
     db.commit()
     db.refresh(lead)
     return lead
@@ -192,6 +196,11 @@ def import_leads_from_csv(
             errors.append(f"Row {row_num}: duplicate email in workspace")
             continue
 
+        last_m = None
+        if "last_message" in fields_lower:
+            raw_lm = col("last_message")
+            last_m = raw_lm if raw_lm else None
+
         db.add(
             Lead(
                 name=name,
@@ -200,6 +209,7 @@ def import_leads_from_csv(
                 tag=None,
                 phone_number=phone,
                 country_code=cc,
+                last_message=last_m,
                 workspace_id=workspace_id,
             )
         )

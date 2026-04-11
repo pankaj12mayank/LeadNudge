@@ -1,4 +1,5 @@
 import hashlib
+import re
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -39,7 +40,7 @@ def request_password_reset(db: Session, email: str) -> None:
     raw = secrets.token_urlsafe(32)
     th = _hash_token(raw)
     now = datetime.now(timezone.utc)
-    expires = now + timedelta(hours=1)
+    expires = now + timedelta(minutes=30)
 
     db.query(PasswordResetToken).filter(
         PasswordResetToken.email == email_norm
@@ -57,12 +58,32 @@ def request_password_reset(db: Session, email: str) -> None:
     base = settings.frontend_base_url.rstrip("/")
     link = f"{base}/reset-password?token={raw}"
 
-    subj = (b.reset_email_subject or "").strip() or "Reset your password"
+    subj_tmpl = (b.reset_email_subject or "").strip() or "Reset your password"
     body_tmpl = (b.reset_email_body or "").strip() or (
-        "You requested a password reset.\n\nOpen this link (valid for one hour):\n"
+        "You requested a password reset.\n\nOpen this link (valid for 30 minutes):\n"
         "{{reset_link}}\n\nIf you did not request this, ignore this email."
     )
-    body = body_tmpl.replace("{{reset_link}}", link).replace("{{reset_url}}", link)
+    if kind == "admin" and admin:
+        user_name = admin.email.split("@")[0] if "@" in admin.email else admin.email
+    elif user:
+        user_name = (user.display_name or "").strip() or (
+            user.email.split("@")[0] if "@" in user.email else user.email
+        )
+    else:
+        user_name = "there"
+
+    subj = (
+        subj_tmpl.replace("{{reset_link}}", link)
+        .replace("{{reset_url}}", link)
+        .replace("{{user_name}}", user_name)
+    )
+    if "<" in subj:
+        subj = re.sub(r"<[^>]+>", "", subj).strip() or "Reset your password"
+    body = (
+        body_tmpl.replace("{{reset_link}}", link)
+        .replace("{{reset_url}}", link)
+        .replace("{{user_name}}", user_name)
+    )
 
     send_plain_email(b, to_addr=email_norm, subject=subj, body=body)
 

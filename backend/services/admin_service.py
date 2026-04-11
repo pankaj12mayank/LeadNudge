@@ -13,6 +13,7 @@ from schemas.pagination import PaginationParams
 from schemas.settings import AdminSettingsUpdate
 from schemas.user import UserAdminPatch, UserCreate
 from schemas.workspace import WorkspacePlanUpdate
+from services import system_log_service, template_mail_service as tm
 
 # AI message caps by plan (workspace-level); shown in admin UI as Free vs Paid (Pro)
 FREE_PLAN_AI_LIMIT = 200
@@ -77,14 +78,23 @@ def create_user(db: Session, data: UserCreate) -> User:
     ws = workspace_for_plan(db, data.plan)
     if db.query(User).filter(User.email == data.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
+    plain = data.password
     user = User(
         email=data.email,
-        password=hash_password(data.password),
+        password=hash_password(plain),
         workspace_id=ws.id,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
+    pv = tm.project_variables(db)
+    nm = (user.display_name or (user.email or "").split("@")[0] or "there").strip()
+    tm.try_send_template(
+        db,
+        tm.TEMPLATE_ACCOUNT_CREATED,
+        user.email,
+        {"name": nm, "email": user.email, "password": plain, **pv},
+    )
     return user
 
 
@@ -95,10 +105,21 @@ def list_users(
     page: int,
     limit: int,
     search: str | None = None,
+    plan: str | None = None,
+    active: bool | None = None,
 ) -> tuple[list[User], int]:
-    q = db.query(User)
+    if plan in ("free", "pro"):
+        q = db.query(User).join(Workspace, User.workspace_id == Workspace.id).filter(
+            Workspace.plan_type == plan
+        )
+    else:
+        q = db.query(User)
     if workspace_id is not None:
         q = q.filter(User.workspace_id == workspace_id)
+    if active is True:
+        q = q.filter(User.is_active.is_(True))
+    elif active is False:
+        q = q.filter(User.is_active.is_(False))
     if search and search.strip():
         term = f"%{search.strip()}%"
         q = q.filter(
@@ -133,6 +154,7 @@ def update_workspace_plan(
     if not ws or ws.name not in (FREE_WORKSPACE_NAME, PRO_WORKSPACE_NAME):
         raise HTTPException(status_code=404, detail="Workspace not found")
     ws.plan_type = data.plan_type
+    ws.plan_expires_at = data.plan_expires_at
     row = (
         db.query(WorkspaceSettings)
         .filter(WorkspaceSettings.workspace_id == workspace_id)
@@ -168,18 +190,68 @@ def delete_user(db: Session, user_id: int) -> None:
     u = db.get(User, user_id)
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
+    email = u.email
+    nm = (u.display_name or (email or "").split("@")[0] or "there").strip()
+    pv = tm.project_variables(db)
     db.delete(u)
     db.commit()
+    tm.try_send_template(
+        db,
+        tm.TEMPLATE_ACCOUNT_DELETED,
+        email,
+        {"name": nm, "email": email or "", **pv},
+    )
 
 
 def patch_user(db: Session, user_id: int, data: UserAdminPatch) -> User:
     u = db.get(User, user_id)
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
+    was_active = u.is_active
     if data.is_active is not None:
         u.is_active = data.is_active
     if data.display_name is not None:
         u.display_name = data.display_name.strip() or None
     db.commit()
     db.refresh(u)
+    if data.is_active is not None and was_active != u.is_active:
+        pv = tm.project_variables(db)
+        nm = (u.display_name or (u.email or "").split("@")[0] or "there").strip()
+        key = (
+            tm.TEMPLATE_ACCOUNT_ACTIVATED
+            if u.is_active
+            else tm.TEMPLATE_ACCOUNT_DEACTIVATED
+        )
+        tm.try_send_template(
+            db,
+            key,
+            u.email,
+            {"name": nm, "email": u.email or "", **pv},
+        )
+    return u
+
+
+def admin_set_user_password(db: Session, user_id: int, new_password: str) -> User:
+    u = db.get(User, user_id)
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+    u.password = hash_password(new_password)
+    db.commit()
+    db.refresh(u)
+    pv = tm.project_variables(db)
+    nm = (u.display_name or (u.email or "").split("@")[0] or "there").strip()
+    tm.try_send_template(
+        db,
+        tm.TEMPLATE_PASSWORD_CHANGED,
+        u.email,
+        {"name": nm, "email": u.email or "", "password": new_password, **pv},
+    )
+    try:
+        system_log_service.log_event(
+            db,
+            kind="SECURITY",
+            message=f"Admin set password user_id={user_id} email={u.email}"[:2000],
+        )
+    except Exception:
+        pass
     return u

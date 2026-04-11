@@ -5,8 +5,11 @@ const adminLinks = [
   { to: "/admin/dashboard", label: "Overview" },
   { to: "/admin/workspaces", label: "Workspaces" },
   { to: "/admin/users", label: "Team users" },
+  { to: "/admin/password-requests", label: "Password requests" },
+  { to: "/admin/email-templates", label: "Email templates" },
   { to: "/admin/ai-settings", label: "AI configuration" },
   { to: "/admin/usage", label: "Usage" },
+  { to: "/admin/logs", label: "Logs & mail" },
   { to: "/admin/account", label: "Account & branding" },
 ];
 
@@ -14,6 +17,7 @@ const userLinks = [
   { to: "/dashboard", label: "Overview" },
   { to: "/leads", label: "Leads" },
   { to: "/followups", label: "Follow-ups" },
+  { to: "/sent-mails", label: "Sent mail" },
   { to: "/email-settings", label: "Email (SMTP)" },
   { to: "/profile", label: "Profile" },
 ];

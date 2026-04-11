@@ -15,6 +15,9 @@ class Message(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     lead_id: Mapped[int] = mapped_column(ForeignKey("leads.id"), index=True)
+    followup_id: Mapped[int | None] = mapped_column(
+        ForeignKey("followups.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     content: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

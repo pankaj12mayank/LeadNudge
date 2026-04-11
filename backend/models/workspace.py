@@ -1,4 +1,6 @@
-from sqlalchemy import Integer, String
+from datetime import datetime
+
+from sqlalchemy import DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db.base import Base
@@ -10,6 +12,9 @@ class Workspace(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255))
     plan_type: Mapped[str] = mapped_column(String(32), default="free")
+    plan_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     users: Mapped[list["User"]] = relationship("User", back_populates="workspace")
     leads: Mapped[list["Lead"]] = relationship("Lead", back_populates="workspace")

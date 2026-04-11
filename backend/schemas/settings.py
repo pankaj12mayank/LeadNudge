@@ -13,6 +13,11 @@ class SettingsOut(BaseModel):
     smtp_port: int | None = None
     smtp_email: str | None = None
     smtp_password: str | None = None
+    ai_messages_used: int = 0
+    outbound_emails_sent: int = 0
+    usage_percent: float = 0.0
+    usage_near_limit: bool = False
+    smtp_fully_configured: bool = False
 
     model_config = {"from_attributes": True}
 

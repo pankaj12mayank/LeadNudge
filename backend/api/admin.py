@@ -1,3 +1,5 @@
+import shutil
+import subprocess
 from math import ceil
 from typing import Annotated
 
@@ -19,24 +21,43 @@ from schemas.admin_profile import (
     BrandingUpdate,
     MailTestRequest,
 )
+from schemas.email_template import EmailTemplateOut, EmailTemplateUpdate
 from schemas.pagination import PaginationParams
+from schemas.password_request import (
+    PaginatedPasswordRequests,
+    PasswordRequestOut,
+)
 from schemas.settings import AdminSettingsUpdate, SettingsOut
 from schemas.system_admin import (
-    ActivityEntryOut,
+    ActivityClearRequest,
     OllamaInstalledModelsOut,
+    OllamaPullOut,
+    OllamaPullRequest,
     OllamaTestOut,
     OllamaTestRequest,
     OpenAiTestOut,
     OpenAiTestRequest,
+    PaginatedActivity,
+    PaginatedSentEmails,
+    PaginatedSystemLogs,
     PaginatedUserUsage,
+    SentEmailRowOut,
+    SentEmailsDeleteRequest,
     SystemStatusOut,
 )
-from schemas.user import PaginatedUsers, UserAdminPatch, UserCreate, UserOut
+from schemas.user import (
+    AdminUserPasswordSet,
+    PaginatedUsers,
+    UserAdminPatch,
+    UserCreate,
+    UserOut,
+)
 from schemas.workspace import WorkspaceOut, WorkspacePlanUpdate
 from services import admin_service, admin_account_service, branding_service
+from services import password_request_service, template_mail_service
 from services.settings_service import get_settings_out
+from services import system_log_service
 from services.system_admin_service import (
-    list_recent_activity,
     paginated_user_usage,
     get_system_status,
 )
@@ -189,7 +210,7 @@ def admin_ollama_models(
     _: Annotated[Principal, Depends(require_admin)],
 ) -> OllamaInstalledModelsOut:
     """Always HTTP 200 with JSON; lists Ollama tags when reachable."""
-    base = (settings.ollama_base_url or "http://127.0.0.1:11434").rstrip("/")
+    base = (settings.ollama_base_url or "http://localhost:11434").rstrip("/")
     env_m = (settings.ollama_model or "llama3.2:latest").strip() or "llama3.2:latest"
     names: list[str] = []
     err: str | None = None
@@ -228,42 +249,97 @@ def admin_ollama_models(
 def admin_ollama_test(
     body: OllamaTestRequest,
     _: Annotated[Principal, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
 ) -> OllamaTestOut:
     """Run a tiny generation with the given model (admin-only; does not persist)."""
-    from agents.ai_router import resolve_ollama_model, run_ollama
+    import traceback
+
+    from agents.ai_router import resolve_ollama_model, run_ollama_admin_test
 
     m = resolve_ollama_model(body.model)
     try:
-        preview = run_ollama("Reply with exactly the single word: OK", model=m)
-        p = (preview or "").strip()
-        if not p:
+        ok, msg, preview, used = run_ollama_admin_test(
+            "Reply with exactly the single word: OK",
+            model=m,
+        )
+        if not ok:
+            try:
+                system_log_service.log_event(
+                    db,
+                    kind="AI",
+                    message=f"Ollama admin test failed model={used!r}: {msg}"[:15000],
+                )
+            except Exception:
+                pass
             return OllamaTestOut(
                 ok=False,
-                message="Ollama returned an empty reply. Try another model or check logs.",
-                model=m,
+                message=msg,
+                model=used,
                 preview=None,
             )
         return OllamaTestOut(
             ok=True,
-            message="Ollama is working. Model responded successfully.",
-            model=m,
-            preview=safe_client_detail(p, max_len=280),
-        )
-    except RuntimeError as e:
-        return OllamaTestOut(
-            ok=False,
-            message=safe_client_detail(str(e)),
-            model=m,
-            preview=None,
+            message=msg,
+            model=used,
+            preview=preview,
         )
     except Exception as e:
         log.warning("Ollama test failed: %s", e)
+        try:
+            system_log_service.log_event(
+                db,
+                kind="AI",
+                message=f"Ollama admin test exception model={m!r}: {e!r}\n{traceback.format_exc()}"[
+                    :15000
+                ],
+            )
+        except Exception:
+            pass
         return OllamaTestOut(
             ok=False,
-            message=safe_client_detail(str(e)),
+            message="AI service temporarily unavailable. Please try again.",
             model=m,
             preview=None,
         )
+
+
+@router.post("/ollama/pull", response_model=OllamaPullOut)
+def admin_ollama_pull(
+    body: OllamaPullRequest,
+    _: Annotated[Principal, Depends(require_admin)],
+) -> OllamaPullOut:
+    """Run `ollama pull` on the API server (requires Ollama CLI on PATH)."""
+    from agents.ai_router import _sanitize_model_name
+
+    name = _sanitize_model_name(body.model.strip())
+    if not shutil.which("ollama"):
+        return OllamaPullOut(
+            ok=False,
+            message="`ollama` CLI not found on the server PATH. Install Ollama or pull the model manually.",
+        )
+    try:
+        proc = subprocess.run(
+            ["ollama", "pull", name],
+            capture_output=True,
+            text=True,
+            timeout=900,
+            errors="replace",
+        )
+        if proc.returncode != 0:
+            err = (proc.stderr or proc.stdout or "").strip() or f"exit {proc.returncode}"
+            return OllamaPullOut(ok=False, message=safe_client_detail(err, max_len=1200))
+        return OllamaPullOut(
+            ok=True,
+            message=f"Model pull finished: {name}. You can select it and test from AI settings.",
+        )
+    except subprocess.TimeoutExpired:
+        return OllamaPullOut(
+            ok=False,
+            message="`ollama pull` timed out (15 min). Try again or pull from a terminal.",
+        )
+    except Exception as e:
+        log.warning("ollama pull failed: %s", e)
+        return OllamaPullOut(ok=False, message=safe_client_detail(str(e)))
 
 
 @router.post("/openai/test", response_model=OpenAiTestOut)
@@ -318,20 +394,130 @@ def admin_system_status(
     return get_system_status(db)
 
 
-@router.get("/activity", response_model=list[ActivityEntryOut])
+@router.get("/activity", response_model=PaginatedActivity)
 def admin_activity(
     _: Annotated[Principal, Depends(require_admin)],
     db: Annotated[Session, Depends(get_db)],
+    page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=50),
-) -> list[ActivityEntryOut]:
-    return list_recent_activity(db, limit=limit)
+    period: str | None = Query(
+        default=None,
+        description="Filter: 'week' (7d) or 'month' (30d); omit for all recent",
+    ),
+) -> PaginatedActivity:
+    page = PaginationParams.clamp_page(page)
+    limit = PaginationParams.clamp_limit(limit)
+    p = (period or "").strip().lower()
+    if p not in ("", "week", "month", "all"):
+        p = None
+    if p == "all":
+        p = None
+    return system_log_service.list_activity_paginated(
+        db, page=page, limit=limit, period=p
+    )
+
+
+@router.post("/activity/clear", status_code=204)
+def admin_activity_clear(
+    body: ActivityClearRequest,
+    _: Annotated[Principal, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> None:
+    rk = body.range.strip().lower()
+    if rk not in ("week", "month"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="range must be 'week' or 'month'",
+        )
+    system_log_service.clear_activity_period(db, range_key=rk)
+
+
+@router.get("/system-logs", response_model=PaginatedSystemLogs)
+def admin_system_logs(
+    _: Annotated[Principal, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=30, ge=1, le=200),
+    type: str | None = Query(default=None, alias="log_type"),
+) -> PaginatedSystemLogs:
+    page = PaginationParams.clamp_page(page)
+    limit = PaginationParams.clamp_limit(limit)
+    rows, total = system_log_service.list_system_logs(
+        db, page=page, limit=limit, type_filter=type
+    )
+    items = [system_log_service.log_row_to_out(r) for r in rows]
+    pages = max(1, ceil(total / limit)) if limit else 1
+    return PaginatedSystemLogs(
+        items=items, total=total, page=page, limit=limit, pages=pages
+    )
+
+
+@router.get("/sent-emails", response_model=PaginatedSentEmails)
+def admin_sent_emails(
+    _: Annotated[Principal, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=30, ge=1, le=200),
+) -> PaginatedSentEmails:
+    from datetime import timezone
+
+    from models.sent_email import SentEmail
+
+    page = PaginationParams.clamp_page(page)
+    limit = PaginationParams.clamp_limit(limit)
+    q = db.query(SentEmail)
+    total = q.count()
+    offset = (page - 1) * limit
+    rows = (
+        q.order_by(SentEmail.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    items: list[SentEmailRowOut] = []
+    for r in rows:
+        ts = r.sent_at
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        items.append(
+            SentEmailRowOut(
+                id=r.id,
+                workspace_id=r.workspace_id,
+                to_email=r.to_email,
+                subject=r.subject,
+                body=r.body[:8000],
+                sent_at=ts.isoformat(),
+                status=r.status,
+            )
+        )
+    pages = max(1, ceil(total / limit)) if limit else 1
+    return PaginatedSentEmails(
+        items=items, total=total, page=page, limit=limit, pages=pages
+    )
+
+
+@router.post("/sent-emails/delete", status_code=204)
+def admin_sent_emails_delete(
+    body: SentEmailsDeleteRequest,
+    _: Annotated[Principal, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> None:
+    from models.sent_email import SentEmail
+
+    ids = [i for i in body.ids if isinstance(i, int) and i > 0]
+    if not ids:
+        return
+    db.query(SentEmail).filter(SentEmail.id.in_(ids)).delete(
+        synchronize_session=False
+    )
+    db.commit()
 
 
 @router.get("/usage/users", response_model=PaginatedUserUsage)
 def admin_usage_users(
     _: Annotated[Principal, Depends(require_admin)],
     db: Annotated[Session, Depends(get_db)],
-    workspace_id: int | None = Query(default=None),
+    workspace_id: int = Query(..., description="Workspace whose users to list"),
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=50, ge=1, le=500),
 ) -> PaginatedUserUsage:
@@ -362,6 +548,72 @@ def update_workspace_plan(
     return WorkspaceOut.model_validate(ws)
 
 
+@router.get("/email-templates", response_model=list[EmailTemplateOut])
+def admin_list_email_templates(
+    _: Annotated[Principal, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> list[EmailTemplateOut]:
+    rows = template_mail_service.list_templates(db)
+    return [EmailTemplateOut.model_validate(r) for r in rows]
+
+
+@router.put("/email-templates/{name}", response_model=EmailTemplateOut)
+def admin_put_email_template(
+    name: str,
+    body: EmailTemplateUpdate,
+    _: Annotated[Principal, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> EmailTemplateOut:
+    try:
+        row = template_mail_service.update_template(
+            db, name, subject=body.subject, body=body.body
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Unknown template name",
+        ) from None
+    return EmailTemplateOut.model_validate(row)
+
+
+@router.get("/password-requests", response_model=PaginatedPasswordRequests)
+def admin_list_password_requests(
+    _: Annotated[Principal, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=30, ge=1, le=200),
+) -> PaginatedPasswordRequests:
+    page = PaginationParams.clamp_page(page)
+    limit = PaginationParams.clamp_limit(limit)
+    rows, total = password_request_service.list_password_requests(
+        db, page=page, limit=limit
+    )
+    pages = max(1, ceil(total / limit)) if limit else 1
+    return PaginatedPasswordRequests(
+        items=[PasswordRequestOut.model_validate(r) for r in rows],
+        total=total,
+        page=page,
+        limit=limit,
+        pages=pages,
+    )
+
+
+@router.patch("/password-requests/{request_id}", response_model=PasswordRequestOut)
+def admin_resolve_password_request(
+    request_id: int,
+    _: Annotated[Principal, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> PasswordRequestOut:
+    try:
+        row = password_request_service.resolve_password_request(db, request_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Request not found",
+        ) from None
+    return PasswordRequestOut.model_validate(row)
+
+
 @router.post("/users", response_model=UserOut)
 def create_user(
     body: UserCreate,
@@ -378,13 +630,36 @@ def list_users(
     db: Annotated[Session, Depends(get_db)],
     workspace_id: int | None = Query(default=None),
     q: str | None = Query(default=None, max_length=200),
+    plan: str | None = Query(default=None, description="free | pro"),
+    status: str | None = Query(default=None, description="active | inactive"),
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=50, ge=1, le=500),
 ) -> PaginatedUsers:
     page = PaginationParams.clamp_page(page)
     limit = PaginationParams.clamp_limit(limit)
+    if plan is not None and plan not in ("free", "pro"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="plan must be free or pro",
+        )
+    if status is not None and status not in ("active", "inactive"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="status must be active or inactive",
+        )
+    active_filter: bool | None = None
+    if status == "active":
+        active_filter = True
+    elif status == "inactive":
+        active_filter = False
     users, total = admin_service.list_users(
-        db, workspace_id, page=page, limit=limit, search=q
+        db,
+        workspace_id,
+        page=page,
+        limit=limit,
+        search=q,
+        plan=plan,
+        active=active_filter,
     )
     pages = max(1, ceil(total / limit)) if limit else 1
     return PaginatedUsers(
@@ -404,6 +679,17 @@ def patch_user(
     db: Annotated[Session, Depends(get_db)],
 ) -> UserOut:
     u = admin_service.patch_user(db, user_id, body)
+    return UserOut.model_validate(u)
+
+
+@router.post("/users/{user_id}/password", response_model=UserOut)
+def admin_set_user_password(
+    user_id: int,
+    body: AdminUserPasswordSet,
+    _: Annotated[Principal, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> UserOut:
+    u = admin_service.admin_set_user_password(db, user_id, body.new_password)
     return UserOut.model_validate(u)
 
 

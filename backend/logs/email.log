@@ -1,0 +1,162 @@
+2026-04-11 14:32:30,190 ERROR ais.email_file followup_email FAILED host=smtp.gmail.com port=587 to=test@testmail.com
+Traceback (most recent call last):
+  File "D:\Py_Projects\ai-sales-agent\backend\services\email_service.py", line 112, in send_followup_email
+    smtp.login(user, password)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 762, in login
+    raise last_exception
+  File "C:\Python314\Lib\smtplib.py", line 751, in login
+    (code, resp) = self.auth(
+                   ~~~~~~~~~^
+        authmethod, getattr(self, method_name),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        initial_response_ok=initial_response_ok)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 669, in auth
+    raise SMTPAuthenticationError(code, resp)
+smtplib.SMTPAuthenticationError: (534, b'5.7.9 Application-specific password required. For more information, go to\n5.7.9  https://support.google.com/mail/?p=InvalidSecondFactor d9443c01a7336-2b2d4f08d1bsm54971345ad.54 - gsmtp')
+2026-04-11 14:36:26,525 ERROR ais.email_file followup_email FAILED host=smtp.gmail.com port=587 to=Somya@gmail.com
+Traceback (most recent call last):
+  File "D:\Py_Projects\ai-sales-agent\backend\services\email_service.py", line 112, in send_followup_email
+    smtp.login(user, password)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 762, in login
+    raise last_exception
+  File "C:\Python314\Lib\smtplib.py", line 751, in login
+    (code, resp) = self.auth(
+                   ~~~~~~~~~^
+        authmethod, getattr(self, method_name),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        initial_response_ok=initial_response_ok)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 669, in auth
+    raise SMTPAuthenticationError(code, resp)
+smtplib.SMTPAuthenticationError: (534, b'5.7.9 Application-specific password required. For more information, go to\n5.7.9  https://support.google.com/mail/?p=InvalidSecondFactor d9443c01a7336-2b2d4f26cdcsm57639615ad.59 - gsmtp')
+2026-04-11 15:01:53,402 ERROR ais.email_file transactional_email FAILED host=smtp.gmail.com port=587 to=dante12mk@gmail.com
+Traceback (most recent call last):
+  File "C:\Python314\Lib\smtplib.py", line 405, in getreply
+    line = self.file.readline(_MAXLINE + 1)
+  File "C:\Python314\Lib\socket.py", line 725, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python314\Lib\ssl.py", line 1304, in recv_into
+    return self.read(nbytes, buffer)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\ssl.py", line 1138, in read
+    return self._sslobj.read(len, buffer)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+TimeoutError: The read operation timed out
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Py_Projects\ai-sales-agent\backend\services\transactional_mail.py", line 51, in send_plain_email
+    smtp.send_message(msg)
+    ~~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 987, in send_message
+    return self.sendmail(from_addr, to_addrs, flatmsg, mail_options,
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                         rcpt_options)
+                         ^^^^^^^^^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 903, in sendmail
+    (code, resp) = self.data(msg)
+                   ~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 587, in data
+    (code, msg) = self.getreply()
+                  ~~~~~~~~~~~~~^^
+  File "C:\Python314\Lib\smtplib.py", line 408, in getreply
+    raise SMTPServerDisconnected("Connection unexpectedly closed: "
+                                 + str(e))
+smtplib.SMTPServerDisconnected: Connection unexpectedly closed: The read operation timed out
+2026-04-11 15:49:25,192 ERROR ais.email_file transactional_email FAILED host=smtp.gmail.com port=587 to=dante12mk@gmail.com
+Traceback (most recent call last):
+  File "C:\Python314\Lib\smtplib.py", line 405, in getreply
+    line = self.file.readline(_MAXLINE + 1)
+  File "C:\Python314\Lib\socket.py", line 725, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python314\Lib\ssl.py", line 1304, in recv_into
+    return self.read(nbytes, buffer)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\ssl.py", line 1138, in read
+    return self._sslobj.read(len, buffer)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+TimeoutError: The read operation timed out
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Py_Projects\ai-sales-agent\backend\services\transactional_mail.py", line 51, in send_plain_email
+    smtp.send_message(msg)
+    ~~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 987, in send_message
+    return self.sendmail(from_addr, to_addrs, flatmsg, mail_options,
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                         rcpt_options)
+                         ^^^^^^^^^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 903, in sendmail
+    (code, resp) = self.data(msg)
+                   ~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 587, in data
+    (code, msg) = self.getreply()
+                  ~~~~~~~~~~~~~^^
+  File "C:\Python314\Lib\smtplib.py", line 408, in getreply
+    raise SMTPServerDisconnected("Connection unexpectedly closed: "
+                                 + str(e))
+smtplib.SMTPServerDisconnected: Connection unexpectedly closed: The read operation timed out
+2026-04-11 16:32:31,672 ERROR ais.email_file followup_email FAILED host=smtp.gmail.com port=587 to=Somya@gmail.com
+Traceback (most recent call last):
+  File "D:\Py_Projects\ai-sales-agent\backend\services\email_service.py", line 155, in send_followup_email
+    smtp.login(user, password)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 762, in login
+    raise last_exception
+  File "C:\Python314\Lib\smtplib.py", line 751, in login
+    (code, resp) = self.auth(
+                   ~~~~~~~~~^
+        authmethod, getattr(self, method_name),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        initial_response_ok=initial_response_ok)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 669, in auth
+    raise SMTPAuthenticationError(code, resp)
+smtplib.SMTPAuthenticationError: (534, b'5.7.9 Application-specific password required. For more information, go to\n5.7.9  https://support.google.com/mail/?p=InvalidSecondFactor d9443c01a7336-2b2d4f3f114sm53883855ad.78 - gsmtp')
+2026-04-11 16:35:20,082 INFO ais.email_file transactional_email sent host=smtp.gmail.com to=dante12mk@gmail.com
+2026-04-11 16:36:03,011 INFO ais.email_file transactional_email sent host=smtp.gmail.com to=dante12mk@gmail.com
+2026-04-11 16:42:46,178 ERROR ais.email_file followup_email FAILED host=smtp.gmail.com port=587 to=Somya@gmail.com
+Traceback (most recent call last):
+  File "C:\Python314\Lib\smtplib.py", line 405, in getreply
+    line = self.file.readline(_MAXLINE + 1)
+  File "C:\Python314\Lib\socket.py", line 725, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python314\Lib\ssl.py", line 1304, in recv_into
+    return self.read(nbytes, buffer)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\ssl.py", line 1138, in read
+    return self._sslobj.read(len, buffer)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+TimeoutError: The read operation timed out
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Py_Projects\ai-sales-agent\backend\services\email_service.py", line 156, in send_followup_email
+    smtp.send_message(msg)
+    ~~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 987, in send_message
+    return self.sendmail(from_addr, to_addrs, flatmsg, mail_options,
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                         rcpt_options)
+                         ^^^^^^^^^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 903, in sendmail
+    (code, resp) = self.data(msg)
+                   ~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 587, in data
+    (code, msg) = self.getreply()
+                  ~~~~~~~~~~~~~^^
+  File "C:\Python314\Lib\smtplib.py", line 408, in getreply
+    raise SMTPServerDisconnected("Connection unexpectedly closed: "
+                                 + str(e))
+smtplib.SMTPServerDisconnected: Connection unexpectedly closed: The read operation timed out
+2026-04-11 17:05:36,812 INFO ais.email_file followup_email sent host=smtp.gmail.com to=dante12mk@gmail.com
