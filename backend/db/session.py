@@ -261,6 +261,27 @@ def init_db() -> None:
         sqlite_ddl="ALTER TABLE workspaces ADD COLUMN plan_expires_at TIMESTAMP",
         postgres_ddl="ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS plan_expires_at TIMESTAMPTZ",
     )
+    _ensure_column_if_missing(
+        "users",
+        "display_name",
+        sqlite_ddl="ALTER TABLE users ADD COLUMN display_name VARCHAR(120)",
+        postgres_ddl="ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(120)",
+    )
+    _ensure_column_if_missing(
+        "users",
+        "phone",
+        sqlite_ddl="ALTER TABLE users ADD COLUMN phone VARCHAR(64)",
+        postgres_ddl="ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(64)",
+    )
+    _ensure_column_if_missing(
+        "users",
+        "is_active",
+        sqlite_ddl="ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT 1 NOT NULL",
+        postgres_ddl=(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN "
+            "NOT NULL DEFAULT true"
+        ),
+    )
     _sqlite_migrate_admins_display_name()
     _sqlite_migrate_leads_contact()
     _sqlite_migrate_settings_smtp()

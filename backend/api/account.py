@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from api.deps import Principal, require_user
@@ -16,7 +16,11 @@ def get_my_account(
     principal: Annotated[Principal, Depends(require_user)],
     db: Annotated[Session, Depends(get_db)],
 ) -> UserOut:
-    assert principal.user_id is not None
+    if principal.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session",
+        )
     u = user_profile_service.get_user(db, principal.user_id)
     return UserOut.model_validate(u)
 
@@ -27,7 +31,11 @@ def patch_my_account(
     principal: Annotated[Principal, Depends(require_user)],
     db: Annotated[Session, Depends(get_db)],
 ) -> UserOut:
-    assert principal.user_id is not None
+    if principal.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session",
+        )
     u = user_profile_service.update_profile(db, principal.user_id, body)
     return UserOut.model_validate(u)
 
@@ -38,5 +46,9 @@ def change_my_password(
     principal: Annotated[Principal, Depends(require_user)],
     db: Annotated[Session, Depends(get_db)],
 ) -> None:
-    assert principal.user_id is not None
+    if principal.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session",
+        )
     user_profile_service.change_password(db, principal.user_id, body)

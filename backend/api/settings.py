@@ -31,7 +31,11 @@ def get_settings(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Cannot read other workspaces",
             )
-        assert principal.workspace_id is not None
+        if principal.workspace_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid session",
+            )
         return get_settings_out(db, principal.workspace_id, mask_api_key=True)
     if workspace_id is None:
         raise HTTPException(
@@ -54,7 +58,11 @@ def put_settings(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Cannot update other workspaces",
             )
-        assert principal.workspace_id is not None
+        if principal.workspace_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid session",
+            )
         update_user_settings(db, principal.workspace_id, body)
         return get_settings_out(db, principal.workspace_id, mask_api_key=True)
     if workspace_id is None:
@@ -88,7 +96,11 @@ def post_smtp_test(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only workspace users can test SMTP from this endpoint",
         )
-    assert principal.workspace_id is not None
+    if principal.workspace_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session",
+        )
     ok, msg = test_smtp_connection(db, principal.workspace_id)
     return SmtpTestResult(ok=ok, message=msg)
 

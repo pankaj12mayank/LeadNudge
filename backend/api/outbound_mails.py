@@ -1,7 +1,7 @@
 from math import ceil
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from api.deps import Principal, require_user
@@ -21,7 +21,11 @@ def list_outbound_mails(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=50, ge=1, le=500),
 ) -> PaginatedOutboundMails:
-    assert principal.workspace_id is not None
+    if principal.workspace_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session",
+        )
     page = PaginationParams.clamp_page(page)
     limit = PaginationParams.clamp_limit(limit)
     rows, total = outbound_mail_service.list_outbound_mails(

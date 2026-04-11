@@ -1,14 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import Card from "../../components/Card";
 import PasswordField from "../../components/PasswordField";
 import { useAuth } from "../../hooks/useAuth";
 import * as userService from "../../services/userService";
 
+function norm(s) {
+  return (s || "").trim();
+}
+
 export default function Profile() {
   const { refreshProfile } = useAuth();
   const [displayName, setDisplayName] = useState("");
   const [phone, setPhone] = useState("");
+  const [savedDisplayName, setSavedDisplayName] = useState("");
+  const [savedPhone, setSavedPhone] = useState("");
   const [email, setEmail] = useState("");
   const [curPw, setCurPw] = useState("");
   const [newPw, setNewPw] = useState("");
@@ -22,8 +28,12 @@ export default function Profile() {
       try {
         const a = await userService.getAccount();
         if (!c) {
-          setDisplayName(a.display_name || "");
-          setPhone(a.phone || "");
+          const dn = a.display_name || "";
+          const ph = a.phone || "";
+          setDisplayName(dn);
+          setPhone(ph);
+          setSavedDisplayName(dn);
+          setSavedPhone(ph);
           setEmail(a.email || "");
         }
       } catch (e) {
@@ -37,14 +47,31 @@ export default function Profile() {
     };
   }, []);
 
+  const profileDirty = useMemo(() => {
+    return (
+      norm(displayName) !== norm(savedDisplayName) ||
+      norm(phone) !== norm(savedPhone)
+    );
+  }, [displayName, phone, savedDisplayName, savedPhone]);
+
   async function saveProfile(e) {
     e.preventDefault();
+    if (!profileDirty) {
+      toast.message("No changes to save");
+      return;
+    }
     setSaving(true);
     try {
+      const d = norm(displayName);
+      const p = norm(phone);
       await userService.patchAccount({
-        display_name: displayName.trim() || null,
-        phone: phone.trim() || null,
+        display_name: d || null,
+        phone: p || null,
       });
+      setDisplayName(d);
+      setPhone(p);
+      setSavedDisplayName(d);
+      setSavedPhone(p);
       await refreshProfile();
       toast.success("Profile saved");
     } catch (err) {
@@ -127,7 +154,11 @@ export default function Profile() {
               placeholder="Optional"
             />
           </div>
-          <button type="submit" disabled={saving} className="btn-primary w-full sm:w-auto">
+          <button
+            type="submit"
+            disabled={saving || !profileDirty}
+            className="btn-primary w-full sm:w-auto"
+          >
             Save profile
           </button>
         </form>

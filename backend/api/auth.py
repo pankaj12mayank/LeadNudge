@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from api.deps import Principal, get_principal
@@ -51,7 +51,11 @@ def auth_me(
             display_name=a.display_name,
             phone=None,
         )
-    assert principal.user_id is not None
+    if principal.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session",
+        )
     u = user_profile_service.get_user(db, principal.user_id)
     return MeOut(
         role="user",
