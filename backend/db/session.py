@@ -1,6 +1,6 @@
 from collections.abc import Generator
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from core.config import settings
@@ -133,6 +133,73 @@ def _sqlite_migrate_followup_failure() -> None:
             pass
 
 
+def _ensure_column_if_missing(
+    table: str,
+    column: str,
+    *,
+    sqlite_ddl: str,
+    postgres_ddl: str,
+) -> None:
+    """Add a column when the table exists but predates the model (any engine)."""
+    try:
+        insp = inspect(engine)
+        if table not in insp.get_table_names():
+            return
+        names = {c["name"] for c in insp.get_columns(table)}
+    except Exception:
+        return
+    if column in names:
+        return
+    url = settings.database_url.lower()
+    with engine.begin() as conn:
+        try:
+            if url.startswith("sqlite"):
+                conn.execute(text(sqlite_ddl))
+            elif "postgresql" in url or "postgres" in url:
+                conn.execute(text(postgres_ddl))
+            else:
+                conn.execute(text(sqlite_ddl))
+        except Exception:
+            pass
+
+
+def _sqlite_migrate_lead_last_message() -> None:
+    """Legacy SQLite path; superseded by _ensure_column_if_missing for cross-DB."""
+    if not settings.database_url.startswith("sqlite"):
+        return
+    with engine.begin() as conn:
+        try:
+            conn.execute(text("ALTER TABLE leads ADD COLUMN last_message TEXT"))
+        except Exception:
+            pass
+
+
+def _sqlite_migrate_message_followup_id() -> None:
+    if not settings.database_url.startswith("sqlite"):
+        return
+    with engine.begin() as conn:
+        try:
+            conn.execute(
+                text("ALTER TABLE messages ADD COLUMN followup_id INTEGER")
+            )
+        except Exception:
+            pass
+
+
+def _sqlite_migrate_followup_sent_at() -> None:
+    if not settings.database_url.startswith("sqlite"):
+        return
+    with engine.begin() as conn:
+        try:
+            conn.execute(
+                text(
+                    "ALTER TABLE followups ADD COLUMN sent_at TIMESTAMP"
+                )
+            )
+        except Exception:
+            pass
+
+
 def _sqlite_migrate_branding_extras() -> None:
     if not settings.database_url.startswith("sqlite"):
         return
@@ -156,15 +223,44 @@ def _sqlite_migrate_branding_extras() -> None:
 def init_db() -> None:
     from models import admin  # noqa: F401
     from models import branding  # noqa: F401
+    from models import email_template  # noqa: F401
     from models import followup  # noqa: F401
     from models import lead  # noqa: F401
     from models import message  # noqa: F401
+    from models import outbound_email  # noqa: F401
+    from models import password_request  # noqa: F401
     from models import password_reset  # noqa: F401
+    from models import sent_email  # noqa: F401
+    from models import system_log  # noqa: F401
     from models import settings as settings_model  # noqa: F401
     from models import user  # noqa: F401
     from models import workspace  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    _ensure_column_if_missing(
+        "leads",
+        "last_message",
+        sqlite_ddl="ALTER TABLE leads ADD COLUMN last_message TEXT",
+        postgres_ddl="ALTER TABLE leads ADD COLUMN IF NOT EXISTS last_message TEXT",
+    )
+    _ensure_column_if_missing(
+        "messages",
+        "followup_id",
+        sqlite_ddl="ALTER TABLE messages ADD COLUMN followup_id INTEGER",
+        postgres_ddl="ALTER TABLE messages ADD COLUMN IF NOT EXISTS followup_id INTEGER",
+    )
+    _ensure_column_if_missing(
+        "followups",
+        "sent_at",
+        sqlite_ddl="ALTER TABLE followups ADD COLUMN sent_at TIMESTAMP",
+        postgres_ddl="ALTER TABLE followups ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ",
+    )
+    _ensure_column_if_missing(
+        "workspaces",
+        "plan_expires_at",
+        sqlite_ddl="ALTER TABLE workspaces ADD COLUMN plan_expires_at TIMESTAMP",
+        postgres_ddl="ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS plan_expires_at TIMESTAMPTZ",
+    )
     _sqlite_migrate_admins_display_name()
     _sqlite_migrate_leads_contact()
     _sqlite_migrate_settings_smtp()
@@ -172,12 +268,17 @@ def init_db() -> None:
     _sqlite_migrate_users_profile()
     _sqlite_migrate_messages_created_at()
     _sqlite_migrate_followup_failure()
+    _sqlite_migrate_lead_last_message()
+    _sqlite_migrate_message_followup_id()
+    _sqlite_migrate_followup_sent_at()
     _sqlite_migrate_branding_extras()
 
     from services import admin_service
+    from services.template_mail_service import ensure_default_templates
 
     db = SessionLocal()
     try:
         admin_service.ensure_fixed_workspaces(db)
+        ensure_default_templates(db)
     finally:
         db.close()

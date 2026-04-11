@@ -25,6 +25,10 @@ class UserAdminPatch(BaseModel):
     display_name: str | None = Field(default=None, max_length=120)
 
 
+class AdminUserPasswordSet(BaseModel):
+    new_password: str = Field(min_length=6, max_length=128)
+
+
 class UserProfileUpdate(BaseModel):
     display_name: str | None = Field(default=None, max_length=120)
     phone: str | None = Field(default=None, max_length=64)

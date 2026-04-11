@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import Card from "../../components/Card";
 import Table from "../../components/Table";
@@ -13,6 +14,8 @@ function planLabel(t) {
 }
 
 export default function Users() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const limit = 20;
   const [workspaces, setWorkspaces] = useState([]);
@@ -23,12 +26,17 @@ export default function Users() {
   });
   const [searchQ, setSearchQ] = useState("");
   const [appliedQ, setAppliedQ] = useState("");
+  const [planFilter, setPlanFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [plan, setPlan] = useState("free");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [listLoading, setListLoading] = useState(false);
+  const [pwUser, setPwUser] = useState(null);
+  const [newPw, setNewPw] = useState("");
+  const [pwSaving, setPwSaving] = useState(false);
 
   const wsById = useMemo(() => {
     const m = {};
@@ -45,6 +53,8 @@ export default function Users() {
         page,
         limit,
         q: appliedQ || undefined,
+        plan: planFilter || undefined,
+        status: statusFilter || undefined,
       });
       setUsersRes({
         items: u.items ?? [],
@@ -70,6 +80,8 @@ export default function Users() {
           page,
           limit,
           q: appliedQ || undefined,
+          plan: planFilter || undefined,
+          status: statusFilter || undefined,
         });
         if (!c) {
           setUsersRes({
@@ -90,7 +102,17 @@ export default function Users() {
     return () => {
       c = true;
     };
-  }, [page, limit, appliedQ]);
+  }, [page, limit, appliedQ, planFilter, statusFilter]);
+
+  useEffect(() => {
+    const preset = location.state?.presetSearch;
+    if (typeof preset === "string" && preset.trim()) {
+      setSearchQ(preset.trim());
+      setAppliedQ(preset.trim());
+      setPage(1);
+      navigate("/admin/users", { replace: true, state: {} });
+    }
+  }, [location.state, navigate]);
 
   async function onCreate(e) {
     e.preventDefault();
@@ -175,6 +197,16 @@ export default function Users() {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
+            className="text-xs font-medium text-blue-700 underline decoration-blue-300 underline-offset-2 dark:text-blue-400"
+            onClick={() => {
+              setPwUser(r);
+              setNewPw("");
+            }}
+          >
+            Set password
+          </button>
+          <button
+            type="button"
             className="text-xs font-medium underline decoration-neutral-400 underline-offset-2"
             onClick={() => toggleActive(r)}
           >
@@ -202,8 +234,8 @@ export default function Users() {
           Invites, access &amp; removal
         </h1>
         <p className="mt-2 w-full text-sm text-neutral-600 dark:text-neutral-400">
-          Invite people to the Free or Pro workspace. Deactivate sign-in or delete a user
-          at any time.
+          Invite people to the Free or Pro workspace. Use <strong>Set password</strong> when a user
+          requested help from the sign-in page — they are emailed the new password if SMTP is set up.
         </p>
       </section>
 
@@ -268,32 +300,66 @@ export default function Users() {
       </Card>
 
       <Card title="All users">
-        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end">
-          <div className="min-w-0 flex-1">
-            <label className="form-label">Search</label>
-            <input
-              className="form-input w-full"
-              value={searchQ}
-              onChange={(e) => setSearchQ(e.target.value)}
-              placeholder="Email or name"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  setAppliedQ(searchQ.trim());
+        <div className="mb-4 flex flex-col gap-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <label className="form-label">Plan type</label>
+              <select
+                className="form-select w-full"
+                value={planFilter}
+                onChange={(e) => {
+                  setPlanFilter(e.target.value);
                   setPage(1);
-                }
-              }}
-            />
+                }}
+              >
+                <option value="">All plans</option>
+                <option value="free">Free</option>
+                <option value="pro">Pro</option>
+              </select>
+            </div>
+            <div>
+              <label className="form-label">Status</label>
+              <select
+                className="form-select w-full"
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">All</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+            <div className="sm:col-span-2 lg:col-span-2">
+              <label className="form-label">Search</label>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                <input
+                  className="form-input min-w-0 flex-1"
+                  value={searchQ}
+                  onChange={(e) => setSearchQ(e.target.value)}
+                  placeholder="Email or name"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      setAppliedQ(searchQ.trim());
+                      setPage(1);
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn-secondary shrink-0"
+                  onClick={() => {
+                    setAppliedQ(searchQ.trim());
+                    setPage(1);
+                  }}
+                >
+                  Search
+                </button>
+              </div>
+            </div>
           </div>
-          <button
-            type="button"
-            className="btn-secondary w-full sm:w-auto"
-            onClick={() => {
-              setAppliedQ(searchQ.trim());
-              setPage(1);
-            }}
-          >
-            Search
-          </button>
         </div>
         {loading ? (
           <p className="text-neutral-500 dark:text-neutral-400">Loading…</p>
@@ -317,6 +383,64 @@ export default function Users() {
           </>
         )}
       </Card>
+
+      {pwUser ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <Card title={`New password — ${pwUser.email}`} className="w-full max-w-md shadow-xl">
+            <form
+              className="space-y-4"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (newPw.length < 6) {
+                  toast.warning("Password must be at least 6 characters.");
+                  return;
+                }
+                setPwSaving(true);
+                try {
+                  await adminService.setUserPassword(pwUser.id, newPw);
+                  toast.success("Password updated. User was emailed if SMTP is configured.");
+                  setPwUser(null);
+                  setNewPw("");
+                  await loadUsers();
+                } catch (err) {
+                  toast.error(err.message);
+                } finally {
+                  setPwSaving(false);
+                }
+              }}
+            >
+              <PasswordField
+                label="New password"
+                className="form-input w-full"
+                value={newPw}
+                onChange={(e) => setNewPw(e.target.value)}
+                disabled={pwSaving}
+                autoComplete="new-password"
+              />
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  className="btn-secondary w-full sm:w-auto"
+                  disabled={pwSaving}
+                  onClick={() => {
+                    setPwUser(null);
+                    setNewPw("");
+                  }}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary w-full sm:w-auto" disabled={pwSaving}>
+                  {pwSaving ? "Saving…" : "Save & notify"}
+                </button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      ) : null}
     </div>
   );
 }

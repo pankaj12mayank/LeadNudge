@@ -26,6 +26,8 @@ export default function Usage() {
     pages: 1,
   });
   const [loading, setLoading] = useState(true);
+  const [usageLoading, setUsageLoading] = useState(false);
+  const [workspacesReady, setWorkspacesReady] = useState(false);
 
   useEffect(() => {
     let c = false;
@@ -63,9 +65,17 @@ export default function Usage() {
           });
           setRows(table);
           setWorkspaceIds(workspaces);
-          if (workspaces[0]) {
-            setWorkspaceFilter((prev) => prev || String(workspaces[0].id));
-          }
+          const firstId = workspaces[0] ? String(workspaces[0].id) : "";
+          setWorkspaceFilter((prev) => {
+            if (
+              prev &&
+              workspaces.some((w) => String(w.id) === prev)
+            ) {
+              return prev;
+            }
+            return firstId;
+          });
+          setWorkspacesReady(true);
         }
       } catch (e) {
         if (!c) toast.error(e.message);
@@ -79,24 +89,29 @@ export default function Usage() {
   }, []);
 
   useEffect(() => {
-    if (!workspaceFilter) return;
+    if (loading || !workspacesReady) return;
+    const wid = Number(workspaceFilter);
+    if (!Number.isFinite(wid) || wid < 1) return;
     let c = false;
     (async () => {
+      setUsageLoading(true);
       try {
         const u = await adminService.getUsageUsers({
-          workspaceId: Number(workspaceFilter),
+          workspaceId: wid,
           page: usagePage,
           limit: usageLimit,
         });
         if (!c) setUsageData(u);
       } catch (e) {
         if (!c) toast.error(e.message);
+      } finally {
+        if (!c) setUsageLoading(false);
       }
     })();
     return () => {
       c = true;
     };
-  }, [workspaceFilter, usagePage]);
+  }, [workspaceFilter, usagePage, loading, workspacesReady, usageLimit]);
 
   const columns = [
     { key: "id", label: "ID" },
@@ -145,8 +160,9 @@ export default function Usage() {
           Reports &amp; per-user AI usage
         </h1>
         <p className="mt-2 w-full text-sm text-neutral-600 dark:text-neutral-400">
-          Compare workspace caps and drill into each person&apos;s AI message count in the
-          workspace you select.
+          Compare workspace caps and drill into each person in the workspace you select. The
+          AI message column is the <strong>total</strong> for that workspace (shared across all
+          users in the pool).
         </p>
       </section>
       {loading ? (
@@ -189,12 +205,17 @@ export default function Usage() {
                 }}
               >
                 {workspaceIds.map((w) => (
-                  <option key={w.id} value={w.id}>
+                  <option key={w.id} value={String(w.id)}>
                     {workspaceLabel(w.name)}
                   </option>
                 ))}
               </select>
             </div>
+            {usageLoading ? (
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                Loading usage…
+              </p>
+            ) : (
             <div className="w-full overflow-x-auto">
               <Table
                 columns={userCols}
@@ -202,11 +223,13 @@ export default function Usage() {
                 emptyText="No users in this workspace"
               />
             </div>
+            )}
             <PaginationBar
               page={usagePage}
               pages={usageData.pages}
               total={usageData.total}
               limit={usageLimit}
+              disabled={usageLoading}
               onPageChange={setUsagePage}
             />
           </Card>

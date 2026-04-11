@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -7,7 +8,16 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from api import account, admin, auth, followups, leads, public, settings as settings_router
+from api import (
+    account,
+    admin,
+    auth,
+    followups,
+    leads,
+    outbound_mails,
+    public,
+    settings as settings_router,
+)
 from core.config import settings
 from core.paths import STATIC_ROOT, UPLOAD_DIR
 from core.security import hash_password
@@ -16,6 +26,23 @@ from models.admin import Admin
 from utils.logger import get_logger
 
 log = get_logger("main")
+
+
+async def _followup_scheduler_loop() -> None:
+    from services import followup_service
+
+    await asyncio.sleep(4)
+    while True:
+        db = SessionLocal()
+        try:
+            n = followup_service.process_due_followups_batch(db)
+            if n:
+                log.info("Processed %s due follow-up(s)", n)
+        except Exception:
+            log.exception("Follow-up scheduler tick failed")
+        finally:
+            db.close()
+        await asyncio.sleep(30)
 
 
 @asynccontextmanager
@@ -33,7 +60,13 @@ async def lifespan(_: FastAPI):
             log.info("Bootstrap admin created: %s", email)
     finally:
         db.close()
+    task = asyncio.create_task(_followup_scheduler_loop())
     yield
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(title="AI Sales Follow-up Agent", lifespan=lifespan)
@@ -57,6 +90,7 @@ app.include_router(account.router)
 app.include_router(admin.router)
 app.include_router(leads.router)
 app.include_router(followups.router)
+app.include_router(outbound_mails.router)
 app.include_router(settings_router.router)
 
 

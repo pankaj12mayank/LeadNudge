@@ -24,6 +24,15 @@ class OpenAiTestOut(BaseModel):
     key_source: str = ""  # "request" | "workspace" | "env" | ""
 
 
+class OllamaPullRequest(BaseModel):
+    model: str = Field(..., min_length=1, max_length=128)
+
+
+class OllamaPullOut(BaseModel):
+    ok: bool
+    message: str
+
+
 class SystemStatusOut(BaseModel):
     backend: str
     ai_active: bool
@@ -60,3 +69,52 @@ class PaginatedUserUsage(BaseModel):
     page: int
     limit: int
     pages: int
+
+
+class PaginatedActivity(BaseModel):
+    items: list[ActivityEntryOut]
+    total: int
+    page: int
+    limit: int
+    pages: int
+
+
+class SystemLogRowOut(BaseModel):
+    id: int
+    type: str
+    message: str
+    created_at: str
+
+
+class PaginatedSystemLogs(BaseModel):
+    items: list[SystemLogRowOut]
+    total: int
+    page: int
+    limit: int
+    pages: int
+
+
+class ActivityClearRequest(BaseModel):
+    range: str  # "week" | "month"
+
+
+class SentEmailRowOut(BaseModel):
+    id: int
+    workspace_id: int | None
+    to_email: str
+    subject: str
+    body: str
+    sent_at: str
+    status: str
+
+
+class PaginatedSentEmails(BaseModel):
+    items: list[SentEmailRowOut]
+    total: int
+    page: int
+    limit: int
+    pages: int
+
+
+class SentEmailsDeleteRequest(BaseModel):
+    ids: list[int] = Field(default_factory=list, max_length=500)

@@ -7,6 +7,7 @@ import Table from "../../components/Table";
 import Badge from "../../components/Badge";
 import PaginationBar from "../../components/PaginationBar";
 import * as userService from "../../services/userService";
+import { countryFlagEmoji } from "../../utils/countryFlag";
 
 const STATUS_OPTIONS = [
   { value: "new", label: "New" },
@@ -22,6 +23,7 @@ const emptyForm = {
   status: "new",
   tag: "",
   phoneE164: "",
+  last_message: "",
 };
 
 function phonePayload(phoneE164) {
@@ -105,6 +107,7 @@ export default function Leads() {
         tag: form.tag.trim() || null,
         phone_number: ph.phone_number,
         country_code: ph.country_code,
+        last_message: form.last_message.trim() || null,
       });
       setForm(emptyForm);
       setAddOpen(false);
@@ -139,6 +142,7 @@ export default function Leads() {
         tag: editing.tag?.trim() || null,
         phone_number: ph.phone_number,
         country_code: ph.country_code,
+        last_message: editing.last_message?.trim() || null,
       });
       setEditing(null);
       toast.success("Lead updated");
@@ -218,12 +222,22 @@ export default function Leads() {
     {
       key: "phone_number",
       label: "Phone",
-      render: (r) => (
-        <span className="text-neutral-600 dark:text-neutral-400">
-          {r.country_code ? `${r.country_code} ` : ""}
-          {r.phone_number || "—"}
-        </span>
-      ),
+      render: (r) => {
+        const flag = countryFlagEmoji(r.country_code);
+        return (
+          <span className="inline-flex items-center gap-2 text-neutral-600 dark:text-neutral-400">
+            {flag ? (
+              <span className="text-lg leading-none" title={r.country_code || ""}>
+                {flag}
+              </span>
+            ) : null}
+            <span>
+              {r.country_code ? `${r.country_code} ` : ""}
+              {r.phone_number || "—"}
+            </span>
+          </span>
+        );
+      },
     },
     {
       key: "status",
@@ -231,6 +245,15 @@ export default function Leads() {
       render: (r) => <Badge variant="muted">{r.status}</Badge>,
     },
     { key: "tag", label: "Tag" },
+    {
+      key: "last_message",
+      label: "Last message",
+      render: (r) => (
+        <span className="line-clamp-2 max-w-xs text-sm text-neutral-600 dark:text-neutral-400">
+          {r.last_message || "—"}
+        </span>
+      ),
+    },
     {
       key: "actions",
       label: "",
@@ -247,6 +270,7 @@ export default function Leads() {
                 status: r.status,
                 tag: r.tag || "",
                 phoneE164: r.phone_number || "",
+                last_message: r.last_message || "",
               })
             }
           >
@@ -312,8 +336,9 @@ export default function Leads() {
           >
             Download sample CSV
           </button>
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Columns: name, email, phone, country_code (e.g. US).
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            Required: name, email, phone, country_code (e.g. US). Optional: last_message (context for
+            AI follow-ups when there is no saved thread yet).
           </p>
         </div>
       </Card>
@@ -408,6 +433,19 @@ export default function Leads() {
                     setForm((f) => ({ ...f, tag: e.target.value }))
                   }
                   disabled={saving}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="form-label">Last message / note (optional)</label>
+                <textarea
+                  className="form-input min-h-[88px] resize-y"
+                  rows={3}
+                  value={form.last_message}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, last_message: e.target.value }))
+                  }
+                  disabled={saving}
+                  placeholder="e.g. They asked for pricing after the demo — used as AI context"
                 />
               </div>
               <div className="flex flex-col gap-2 sm:col-span-2 sm:flex-row">
@@ -510,6 +548,18 @@ export default function Leads() {
                   onChange={(e) =>
                     setEditing((x) => ({ ...x, tag: e.target.value }))
                   }
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="form-label">Last message / note (optional)</label>
+                <textarea
+                  className="form-input min-h-[88px] resize-y"
+                  rows={3}
+                  value={editing.last_message || ""}
+                  onChange={(e) =>
+                    setEditing((x) => ({ ...x, last_message: e.target.value }))
+                  }
+                  placeholder="Context for AI when scheduling follow-ups"
                 />
               </div>
               <div className="flex flex-col gap-2 sm:col-span-2 sm:flex-row">

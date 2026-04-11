@@ -3,14 +3,18 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from api.deps import Principal, get_principal
+from api.deps import Principal, get_principal, require_admin
 from db.session import get_db
+from schemas.admin_profile import MailTestRequest
 from schemas.settings import SettingsOut, SettingsUpdate, SmtpTestResult
+from services import branding_service
 from services.settings_service import (
     get_settings_out,
     test_smtp_connection,
     update_user_settings,
 )
+from services.transactional_mail import mail_configured, send_plain_email
+from utils.smtp_errors import format_smtp_error
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -87,3 +91,28 @@ def post_smtp_test(
     assert principal.workspace_id is not None
     ok, msg = test_smtp_connection(db, principal.workspace_id)
     return SmtpTestResult(ok=ok, message=msg)
+
+
+@router.post("/test-email", response_model=SmtpTestResult)
+def post_settings_test_email(
+    body: MailTestRequest,
+    _: Annotated[Principal, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> SmtpTestResult:
+    """Send a test message using branding SMTP; result is logged to logs/email.log."""
+    b = branding_service.get_or_create_branding(db)
+    if not mail_configured(b):
+        return SmtpTestResult(
+            ok=False,
+            message="Configure SMTP host, port, and sender email first",
+        )
+    try:
+        send_plain_email(
+            b,
+            to_addr=str(body.to_email),
+            subject="Test email from your CRM",
+            body="This is a test message. Your outgoing mail settings are working.",
+        )
+        return SmtpTestResult(ok=True, message="Test email sent successfully.")
+    except Exception as e:
+        return SmtpTestResult(ok=False, message=format_smtp_error(e))

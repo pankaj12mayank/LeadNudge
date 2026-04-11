@@ -12,7 +12,6 @@ from models.settings import WorkspaceSettings
 from models.user import User
 from schemas.pagination import PaginationParams
 from schemas.system_admin import (
-    ActivityEntryOut,
     PaginatedUserUsage,
     SystemStatusOut,
     UserUsageRowOut,
@@ -58,32 +57,6 @@ def get_system_status(db: Session) -> SystemStatusOut:
         ai_message=msg,
         last_activity_at=last_iso,
     )
-
-
-def list_recent_activity(db: Session, *, limit: int = 20) -> list[ActivityEntryOut]:
-    limit = max(1, min(50, limit))
-    rows = (
-        db.query(Message, Lead.name)
-        .join(Lead, Message.lead_id == Lead.id)
-        .order_by(Message.id.desc())
-        .limit(limit)
-        .all()
-    )
-    out: list[ActivityEntryOut] = []
-    for msg, lead_name in rows:
-        ts = msg.created_at
-        if ts is None:
-            continue
-        if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
-        out.append(
-            ActivityEntryOut(
-                occurred_at=ts.isoformat(),
-                kind="ai_draft",
-                summary=f"Draft for lead «{lead_name}»",
-            )
-        )
-    return out
 
 
 def paginated_user_usage(

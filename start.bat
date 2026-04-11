@@ -2,7 +2,7 @@
 setlocal EnableExtensions
 cd /d "%~dp0"
 
-REM Visible terminals: Backend + Frontend in separate windows (no hidden PowerShell).
+REM Backend / Frontend / Ollama open minimized (taskbar). Restore a window to see logs.
 REM Ports: edit ports.env next to this file (BACKEND_PORT=0 = auto free port from 8000).
 REM Set SKIP_OLLAMA_AUTO=1 to skip starting Ollama.
 
@@ -21,19 +21,19 @@ if not defined SKIP_OLLAMA_AUTO (
 )
 
 echo.
-echo  [1/2] Opening BACKEND in a new window...
-start "AI Sales - Backend" cmd /k "cd /d ""%BACKEND%"" && ""%PYEXE%"" run_prod.py"
+echo  [1/2] Opening BACKEND (minimized)...
+start /MIN "AI Sales - Backend" cmd /k "cd /d ""%BACKEND%"" && ""%PYEXE%"" run_prod.py"
 
 timeout /t 3 /nobreak >nul
 
-echo  [2/2] Opening FRONTEND in a new window...
-start "AI Sales - Frontend" cmd /k "cd /d ""%FRONTEND%"" && npm run dev"
+echo  [2/2] Opening FRONTEND (minimized)...
+start /MIN "AI Sales - Frontend" cmd /k "cd /d ""%FRONTEND%"" && npm run dev"
 
 timeout /t 3 /nobreak >nul
 start "" "http://localhost:5173"
 
 echo.
-echo  Done. Two windows: "AI Sales - Backend" and "AI Sales - Frontend".
+echo  Done. Backend and Frontend run minimized — click taskbar buttons to view logs.
 echo  Browser: http://localhost:5173
 echo  Tip: do not pin frontend/.env VITE_API_URL to port 8000 if BACKEND_PORT=0 — use Vite /api proxy.
 

@@ -14,5 +14,8 @@ class Followup(Base):
     scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(32), default="pending")
     failure_reason: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     lead: Mapped["Lead"] = relationship("Lead", back_populates="followups")

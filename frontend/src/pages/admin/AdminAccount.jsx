@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import Card from "../../components/Card";
 import LogoUploadZone from "../../components/LogoUploadZone";
 import PasswordField from "../../components/PasswordField";
+import ResetEmailHtmlEditor from "../../components/ResetEmailHtmlEditor";
 import { useAuth } from "../../hooks/useAuth";
 import { useSite } from "../../context/SiteContext";
 import * as adminService from "../../services/adminService";
@@ -208,8 +209,9 @@ export default function AdminAccount() {
     }
     setSaving(true);
     try {
-      await adminService.postBrandingMailTest(to);
-      toast.success("Test email sent.");
+      const r = await adminService.postBrandingMailTest(to);
+      if (r?.ok) toast.success(r.message || "Test email sent.");
+      else toast.error(r?.message || "Test email failed.");
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -304,11 +306,15 @@ export default function AdminAccount() {
       <Card title="SMTP & password-reset email">
         <form onSubmit={saveMail} className="max-w-2xl space-y-4">
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            Configure these to send “forgot password” links. Use{" "}
+            Configure these to send “forgot password” links. In the body, use{" "}
             <code className="rounded bg-neutral-100 px-1 text-xs dark:bg-neutral-800">
               {"{{reset_link}}"}
             </code>{" "}
-            in the email body template.
+            for the reset URL and{" "}
+            <code className="rounded bg-neutral-100 px-1 text-xs dark:bg-neutral-800">
+              {"{{user_name}}"}
+            </code>{" "}
+            for the recipient&apos;s name (or email prefix).
           </p>
           <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
             <strong>Gmail:</strong> use <code className="text-xs">smtp.gmail.com</code>, port{" "}
@@ -386,15 +392,11 @@ export default function AdminAccount() {
             />
           </div>
           <div>
-            <label className="form-label">Reset email body</label>
-            <textarea
-              className="form-input min-h-[140px] font-mono text-sm"
+            <label className="form-label">Reset email body (HTML)</label>
+            <ResetEmailHtmlEditor
               value={resetBody}
-              onChange={(e) => setResetBody(e.target.value)}
+              onChange={setResetBody}
               disabled={saving}
-              placeholder={
-                "You requested a password reset.\n\nOpen this link:\n{{reset_link}}\n\nIf you did not request this, ignore this email."
-              }
             />
           </div>
           <button type="submit" disabled={saving} className="btn-primary w-full sm:w-auto">
@@ -414,7 +416,7 @@ export default function AdminAccount() {
             />
           </div>
           <button type="submit" disabled={saving} className="btn-secondary w-full shrink-0 sm:w-auto">
-            Send test
+            Test email
           </button>
         </form>
       </Card>

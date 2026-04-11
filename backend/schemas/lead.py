@@ -17,6 +17,11 @@ class LeadCreate(BaseModel):
     tag: str | None = Field(default=None, max_length=128)
     phone_number: str | None = Field(default=None, max_length=64)
     country_code: str | None = Field(default=None, max_length=8)
+    last_message: str | None = Field(
+        default=None,
+        max_length=20000,
+        description="Last note or inbound message; used as AI context when no thread exists",
+    )
 
     @field_validator("phone_number")
     @classmethod
@@ -45,6 +50,7 @@ class LeadUpdate(BaseModel):
     tag: str | None = Field(default=None, max_length=128)
     phone_number: str | None = Field(default=None, max_length=64)
     country_code: str | None = Field(default=None, max_length=8)
+    last_message: str | None = Field(default=None, max_length=20000)
 
     @field_validator("phone_number")
     @classmethod
@@ -78,6 +84,7 @@ class LeadOut(BaseModel):
     tag: str | None
     phone_number: str | None
     country_code: str | None
+    last_message: str | None = None
     workspace_id: int
 
     model_config = {"from_attributes": True}

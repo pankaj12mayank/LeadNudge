@@ -6,6 +6,8 @@ import { useSite } from "../../context/SiteContext";
 import * as adminService from "../../services/adminService";
 import { workspaceLabel } from "../../utils/workspaceLabel";
 
+const OLLAMA_PRESETS = ["llama3.2:latest", "mistral:latest", "gemma2:2b"];
+
 /** Prefer a name that exists in `ollama list` (API /tags), else server default e.g. llama3.2:latest */
 function pickOllamaDefault(envDefault, models) {
   const def = (envDefault || "llama3.2:latest").trim() || "llama3.2:latest";
@@ -42,6 +44,7 @@ export default function AISettings() {
   const [saving, setSaving] = useState(false);
   const [testingOllama, setTestingOllama] = useState(false);
   const [testingOpenAi, setTestingOpenAi] = useState(false);
+  const [pullingOllama, setPullingOllama] = useState(false);
 
   const openaiModel = site?.openai_chat_model || "gpt-4o-mini";
 
@@ -159,6 +162,39 @@ export default function AISettings() {
       toast.error(err.message || "Ollama test failed");
     } finally {
       setTestingOllama(false);
+    }
+  }
+
+  async function onPullOllama() {
+    const name =
+      ollamaTrimmed ||
+      pickOllamaDefault(
+        ollamaMeta.env_default || siteOllamaModel,
+        ollamaMeta.models,
+      );
+    setPullingOllama(true);
+    try {
+      const r = await adminService.pullOllamaModel(name);
+      if (r.ok) {
+        toast.success(r.message);
+      } else {
+        toast.error(r.message);
+      }
+      try {
+        const om = await adminService.getOllamaInstalledModels();
+        setOllamaMeta({
+          env_default: om.env_default || siteOllamaModel || "",
+          models: om.models || [],
+          ollama_url: (om.ollama_url || siteOllamaUrl).replace(/\/$/, ""),
+          error: om.error || null,
+        });
+      } catch {
+        /* ignore */
+      }
+    } catch (e) {
+      toast.error(e.message || "Pull failed");
+    } finally {
+      setPullingOllama(false);
     }
   }
 
@@ -395,7 +431,7 @@ export default function AISettings() {
                     disabled={testingOpenAi || saving || !workspaceId}
                     onClick={onTestOpenAi}
                   >
-                    {testingOpenAi ? "Testing…" : "Test OpenAI key"}
+                    {testingOpenAi ? "Testing…" : "Test AI response (OpenAI)"}
                   </button>
                   <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
                     Uses the key in the field if you typed one; otherwise the saved workspace key,
@@ -405,6 +441,30 @@ export default function AISettings() {
               </div>
             ) : (
               <div className="space-y-2">
+                <label className="form-label" htmlFor="ollama-preset">
+                  Model preset
+                </label>
+                <select
+                  id="ollama-preset"
+                  className="form-select w-full max-w-xl"
+                  value={
+                    OLLAMA_PRESETS.includes(ollamaWsModel.trim())
+                      ? ollamaWsModel.trim()
+                      : "__custom__"
+                  }
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v !== "__custom__") setOllamaWsModel(v);
+                  }}
+                  disabled={saving || pullingOllama}
+                >
+                  {OLLAMA_PRESETS.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                  <option value="__custom__">Custom (edit field below)</option>
+                </select>
                 <label className="form-label" htmlFor="ollama-model-ws">
                   Ollama model for this workspace
                 </label>
@@ -414,7 +474,7 @@ export default function AISettings() {
                   list="ollama-model-options"
                   value={ollamaWsModel}
                   onChange={(e) => setOllamaWsModel(e.target.value)}
-                  disabled={saving}
+                  disabled={saving || pullingOllama}
                   placeholder={
                     ollamaMeta.env_default
                       ? `Leave empty for default: ${ollamaMeta.env_default}`
@@ -427,20 +487,29 @@ export default function AISettings() {
                     <option key={m} value={m} />
                   ))}
                 </datalist>
-                <div>
+                <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
                     className="btn-secondary"
-                    disabled={testingOllama || saving}
+                    disabled={testingOllama || saving || pullingOllama}
                     onClick={onTestOllama}
                   >
-                    {testingOllama ? "Testing…" : "Test Ollama model"}
+                    {testingOllama ? "Testing…" : "Test AI response (Ollama)"}
                   </button>
-                  <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-                    Sends a one-word test prompt using the model above (or server default if empty).
-                    Check the toast: success means follow-ups can use this model.
-                  </p>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    disabled={pullingOllama || saving || testingOllama}
+                    onClick={onPullOllama}
+                  >
+                    {pullingOllama ? "Pulling…" : "Pull model on server"}
+                  </button>
                 </div>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                  Pull runs <code className="text-xs">ollama pull</code> on the machine where the API
+                  runs (needs Ollama CLI in PATH). Test sends a short prompt; on failure the app may
+                  fall back to <code className="text-xs">OLLAMA_MODEL</code> when generating drafts.
+                </p>
                 {ollamaNotInList ? (
                   <p className="text-xs text-amber-800 dark:text-amber-200">
                     This name is not in the current Ollama list above. Fix the spelling, pick from

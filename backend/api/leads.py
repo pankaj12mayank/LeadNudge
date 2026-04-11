@@ -11,7 +11,11 @@ from services import lead_service
 
 router = APIRouter(prefix="/leads", tags=["leads"])
 
-CSV_SAMPLE = "name,email,phone,country_code\nAcme Corp,contact@acme.com,+15551234567,US\n"
+CSV_SAMPLE = (
+    "name,email,phone,country_code,last_message\n"
+    "Acme Corp,contact@acme.com,+15551234567,US,"
+    "\"Thanks for the demo — follow up next week\"\n"
+)
 
 
 def _workspace_scope(principal: Principal, workspace_id: int | None) -> int | None:
@@ -80,7 +84,11 @@ def create_lead(
         wid = workspace_id
     else:
         wid = principal.workspace_id
-    assert wid is not None
+        if wid is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No workspace assigned to this account",
+            )
     lead = lead_service.create_lead(db, wid, body)
     return LeadOut.model_validate(lead)
 
@@ -101,7 +109,11 @@ async def import_leads_csv(
         wid = workspace_id
     else:
         wid = principal.workspace_id
-    assert wid is not None
+        if wid is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No workspace assigned to this account",
+            )
     if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
