@@ -336,7 +336,7 @@ def admin_ollama_test(
             pass
         return OllamaTestOut(
             ok=False,
-            message="AI service temporarily unavailable. Please try again.",
+            message=safe_client_detail(str(e), max_len=600),
             model=m,
             preview=None,
         )
@@ -594,8 +594,20 @@ def list_workspaces(
     _: Annotated[Principal, Depends(require_admin)],
     db: Annotated[Session, Depends(get_db)],
 ) -> list[WorkspaceOut]:
-    items = admin_service.list_workspaces(db)
-    return [WorkspaceOut.model_validate(w) for w in items]
+    rows = admin_service.list_workspaces_with_settings(db)
+    out: list[WorkspaceOut] = []
+    for w, st in rows:
+        out.append(
+            WorkspaceOut(
+                id=w.id,
+                name=w.name,
+                plan_type=w.plan_type,
+                plan_expires_at=w.plan_expires_at,
+                ai_mode=st.ai_mode if st else None,
+                usage_limit=int(st.usage_limit) if st and st.usage_limit is not None else None,
+            )
+        )
+    return out
 
 
 @router.patch("/workspaces/{workspace_id}", response_model=WorkspaceOut)

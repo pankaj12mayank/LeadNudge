@@ -220,6 +220,30 @@ def _sqlite_migrate_branding_extras() -> None:
                 pass
 
 
+def _ensure_followup_pending_lead_schedule_unique() -> None:
+    """
+    Prevent duplicate pending follow-ups for the same lead and scheduled instant (race-safe).
+    Normalizes/dedupes existing rows, then adds a partial unique index.
+    """
+    from services.followup_service import dedupe_and_normalize_pending_followups
+
+    db = SessionLocal()
+    try:
+        dedupe_and_normalize_pending_followups(db)
+    finally:
+        db.close()
+
+    idx = (
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_uq_followups_pending_lead_scheduled "
+        "ON followups (lead_id, scheduled_at) WHERE status = 'pending'"
+    )
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(idx))
+    except Exception:
+        pass
+
+
 def init_db() -> None:
     from models import admin  # noqa: F401
     from models import branding  # noqa: F401
@@ -431,6 +455,50 @@ def init_db() -> None:
             "BOOLEAN NOT NULL DEFAULT false"
         ),
     )
+    _ensure_column_if_missing(
+        "users",
+        "ai_message_limit",
+        sqlite_ddl="ALTER TABLE users ADD COLUMN ai_message_limit INTEGER",
+        postgres_ddl="ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_message_limit INTEGER",
+    )
+    _ensure_column_if_missing(
+        "users",
+        "usage_email_90_sent",
+        sqlite_ddl=(
+            "ALTER TABLE users ADD COLUMN usage_email_90_sent INTEGER DEFAULT 0 NOT NULL"
+        ),
+        postgres_ddl=(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS usage_email_90_sent "
+            "BOOLEAN NOT NULL DEFAULT false"
+        ),
+    )
+    _ensure_column_if_missing(
+        "users",
+        "usage_email_limit_sent",
+        sqlite_ddl=(
+            "ALTER TABLE users ADD COLUMN usage_email_limit_sent INTEGER DEFAULT 0 NOT NULL"
+        ),
+        postgres_ddl=(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS usage_email_limit_sent "
+            "BOOLEAN NOT NULL DEFAULT false"
+        ),
+    )
+    _ensure_column_if_missing(
+        "followups",
+        "scheduled_by_user_id",
+        sqlite_ddl="ALTER TABLE followups ADD COLUMN scheduled_by_user_id INTEGER",
+        postgres_ddl=(
+            "ALTER TABLE followups ADD COLUMN IF NOT EXISTS scheduled_by_user_id INTEGER"
+        ),
+    )
+    _ensure_column_if_missing(
+        "messages",
+        "created_by_user_id",
+        sqlite_ddl="ALTER TABLE messages ADD COLUMN created_by_user_id INTEGER",
+        postgres_ddl=(
+            "ALTER TABLE messages ADD COLUMN IF NOT EXISTS created_by_user_id INTEGER"
+        ),
+    )
     if settings.database_url.startswith("sqlite"):
         with engine.begin() as conn:
             try:
@@ -464,6 +532,8 @@ def init_db() -> None:
             )
     except Exception:
         pass
+
+    _ensure_followup_pending_lead_schedule_unique()
 
     from services import admin_service
     from services.template_mail_service import ensure_default_templates

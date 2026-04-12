@@ -51,6 +51,22 @@ def extract_ollama_completion(data: Any) -> str | None:
         t = clean_text(msg)
         if t:
             return t
+    choices = data.get("choices")
+    if isinstance(choices, list) and choices:
+        first = choices[0]
+        if isinstance(first, dict):
+            m2 = first.get("message")
+            if isinstance(m2, dict):
+                c2 = m2.get("content")
+                if c2 is not None:
+                    t = clean_text(str(c2))
+                    if t:
+                        return t
+            txt = first.get("text")
+            if txt is not None:
+                t = clean_text(str(txt))
+                if t:
+                    return t
     return None
 
 

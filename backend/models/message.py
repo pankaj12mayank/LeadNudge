@@ -16,6 +16,11 @@ class Message(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     lead_id: Mapped[int] = mapped_column(ForeignKey("leads.id"), index=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     followup_id: Mapped[int | None] = mapped_column(
         ForeignKey("followups.id", ondelete="SET NULL"), nullable=True, index=True
     )

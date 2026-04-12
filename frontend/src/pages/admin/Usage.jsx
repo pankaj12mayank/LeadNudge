@@ -14,6 +14,7 @@ export default function Usage() {
     leads: 0,
     followups: 0,
     withAiMessage: 0,
+    withAiSampleCapped: false,
   });
   const [rows, setRows] = useState([]);
   const [workspaceIds, setWorkspaceIds] = useState([]);
@@ -36,32 +37,25 @@ export default function Usage() {
         const [users, leads, followups, workspaces] = await Promise.all([
           adminService.listUsers(undefined, { page: 1, limit: 1 }),
           userService.listLeads(undefined, { page: 1, limit: 1 }),
-          userService.listFollowups(undefined, { page: 1, limit: 500 }),
+          userService.listFollowups(undefined, { page: 1, limit: 80 }),
           adminService.listWorkspaces(),
         ]);
         const fuItems = followups.items ?? [];
         const withAi = fuItems.filter((f) => f.last_message).length;
-        const settingsList = await Promise.all(
-          workspaces.map((w) =>
-            adminService.getSettings(w.id).catch(() => null),
-          ),
-        );
-        const table = workspaces.map((w, i) => {
-          const s = settingsList[i];
-          return {
-            id: w.id,
-            name: workspaceLabel(w.name),
-            plan: w.plan_type,
-            usage_limit: s?.usage_limit ?? "—",
-            ai_mode: s?.ai_mode ?? "—",
-          };
-        });
+        const table = workspaces.map((w) => ({
+          id: w.id,
+          name: workspaceLabel(w.name),
+          plan: w.plan_type,
+          usage_limit: w.usage_limit ?? "—",
+          ai_mode: w.ai_mode ?? "—",
+        }));
         if (!c) {
           setSummary({
             users: users.total ?? 0,
             leads: leads.total ?? 0,
             followups: followups.total ?? 0,
             withAiMessage: withAi,
+            withAiSampleCapped: fuItems.length >= 80,
           });
           setRows(table);
           setWorkspaceIds(workspaces);
@@ -174,7 +168,12 @@ export default function Usage() {
               ["Users", summary.users],
               ["Leads", summary.leads],
               ["Follow-ups", summary.followups],
-              ["With AI draft (sample)", summary.withAiMessage],
+              [
+                "With AI Usage",
+                summary.withAiSampleCapped
+                  ? `${summary.withAiMessage}+`
+                  : summary.withAiMessage,
+              ],
             ].map(([label, val]) => (
               <Card key={label} noBodyPadding>
                 <div className="p-4">

@@ -6,19 +6,27 @@ from sqlalchemy.orm import Session
 
 from models.user import User
 from models.workspace import Workspace
-from services import template_mail_service as tm
+from services import branding_service, template_mail_service as tm
 from services.plan_access_service import workspace_plan_expired
+from services.transactional_mail import mail_configured
 
 
 def maybe_send_plan_expired_emails(db: Session, workspace_id: int) -> None:
     """
     When the workspace end date has passed, email active members once using TEMPLATE_PLAN_EXPIRED.
     Cleared when an admin sets a future plan_expires_at.
+
+    Does not set plan_expired_email_sent if SMTP is not configured or every send fails, so delivery
+    can be retried after fixing mail settings.
     """
     ws = db.get(Workspace, workspace_id)
     if not ws or not workspace_plan_expired(db, workspace_id):
         return
     if ws.plan_expired_email_sent:
+        return
+
+    b = branding_service.get_or_create_branding(db)
+    if not mail_configured(b):
         return
 
     users = (
@@ -27,15 +35,43 @@ def maybe_send_plan_expired_emails(db: Session, workspace_id: int) -> None:
         .all()
     )
     pv = tm.project_variables(db)
+    any_sent = False
     for u in users:
-        nm = (u.display_name or (u.email or "").split("@")[0] or "there").strip()
-        tm.try_send_template(
-            db,
-            tm.TEMPLATE_PLAN_EXPIRED,
-            u.email or "",
-            {"name": nm, "email": u.email or "", **pv},
-        )
-    ws.plan_expired_email_sent = True
+        email = (u.email or "").strip()
+        if not email:
+            continue
+        nm = (u.display_name or email.split("@")[0] or "there").strip()
+        try:
+            tm.send_template_email(
+                db,
+                tm.TEMPLATE_PLAN_EXPIRED,
+                email,
+                {"name": nm, "email": u.email or "", **pv},
+            )
+            any_sent = True
+        except Exception as e:
+            try:
+                from services import system_log_service
+
+                system_log_service.log_event(
+                    db,
+                    kind="EMAIL",
+                    message=(
+                        f"Plan expired mail FAIL to={email}: {e!s}. "
+                        "Check Admin → Account & branding SMTP and the plan_expired template."
+                    )[:8000],
+                )
+            except Exception:
+                pass
+
+    with_email = [u for u in users if (u.email or "").strip()]
+    if not with_email:
+        ws.plan_expired_email_sent = True
+    elif any_sent:
+        ws.plan_expired_email_sent = True
+    else:
+        return
+
     db.commit()
     db.refresh(ws)
     from services import usage_history_service as uh

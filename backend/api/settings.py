@@ -36,13 +36,18 @@ def get_settings(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid session",
             )
-        return get_settings_out(db, principal.workspace_id, mask_api_key=True)
+        return get_settings_out(
+            db,
+            principal.workspace_id,
+            mask_api_key=True,
+            for_user_id=principal.user_id,
+        )
     if workspace_id is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="workspace_id query required for admin",
         )
-    return get_settings_out(db, workspace_id, mask_api_key=False)
+    return get_settings_out(db, workspace_id, mask_api_key=False, for_user_id=None)
 
 
 @router.put("", response_model=SettingsOut)
@@ -64,7 +69,12 @@ def put_settings(
                 detail="Invalid session",
             )
         update_user_settings(db, principal.workspace_id, body)
-        return get_settings_out(db, principal.workspace_id, mask_api_key=True)
+        return get_settings_out(
+            db,
+            principal.workspace_id,
+            mask_api_key=True,
+            for_user_id=principal.user_id,
+        )
     if workspace_id is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -83,7 +93,7 @@ def put_settings(
         ),
         changed_by=principal.admin_id,
     )
-    return get_settings_out(db, workspace_id, mask_api_key=False)
+    return get_settings_out(db, workspace_id, mask_api_key=False, for_user_id=None)
 
 
 @router.post("/smtp/test", response_model=SmtpTestResult)

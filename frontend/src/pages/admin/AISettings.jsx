@@ -110,8 +110,6 @@ export default function AISettings() {
     };
   }, [siteOllamaUrl, siteOllamaModel]);
 
-  const modelsKey = ollamaMeta.models.join("\0");
-
   useEffect(() => {
     if (!workspaceId) return;
     let c = false;
@@ -140,7 +138,7 @@ export default function AISettings() {
     return () => {
       c = true;
     };
-  }, [workspaceId, ollamaMeta.env_default, modelsKey, siteOllamaModel]);
+  }, [workspaceId]);
 
   async function onTestOllama() {
     const m = ollamaTrimmed || null;
@@ -526,7 +524,7 @@ export default function AISettings() {
             )}
 
             <div>
-              <label className="form-label">AI message cap (this workspace)</label>
+              <label className="form-label">Master AI message cap (workspace ceiling)</label>
               <input
                 type="number"
                 min={0}
@@ -536,7 +534,8 @@ export default function AISettings() {
                 disabled={saving}
               />
               <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-                Free / Paid plans set a default when you create or change plan; you can override here.
+                Maximum any user can be assigned under Admin → Users (personal caps must be ≤ this).
+                Plan changes still set a default you can override here.
               </p>
             </div>
 

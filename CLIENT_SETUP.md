@@ -1,81 +1,98 @@
 # Client setup guide
 
-Step-by-step instructions to install and run the **AI Sales Agent** console on a new machine (Windows-focused; Linux/macOS steps are similar).
+Install and run **AI Sales Agent** on a new machine. Windows steps are primary; Linux/macOS use the same commands with `source` instead of `Scripts\activate`.
 
-## B2B plan: you keep admin, clients get only the user portal
+**Related docs**
 
-Use this when you **sell the system to businesses** and want **low-cost hosting** on your own domain.
+| Doc | Use for |
+|-----|---------|
+| **[`SIMPLE_START.md`](./SIMPLE_START.md)** | Short local vs server overview |
+| **[`README.md`](./README.md)** | Features, env variable tables, architecture |
+| **[`CI_CD_DEPLOYMENT_GUIDE.md`](./CI_CD_DEPLOYMENT_GUIDE.md)** | Production deploy + GitHub Actions from zero |
+
+---
+
+## B2B: you keep admin; clients get only the user portal
 
 | Role | Access |
 |------|--------|
-| **You (vendor / operator)** | Full **admin** — workspaces, Team users, branding, SMTP, logs, AI settings. Admin credentials live only with you. |
-| **Your customer’s team** | **Workspace users** only — after login they see Leads, Follow-ups, mail, profile, etc. They use the **same public URL** as you, but with **user** accounts you create. They do **not** need admin and should not receive admin passwords. |
+| **You (vendor)** | **Admin** — workspaces, Team, branding, SMTP, logs, AI settings. |
+| **Customer’s team** | **Workspace users** — same public URL, credentials you create. No admin. |
 
-**Operational checklist:**
+**Checklist:** deploy once → **Branding** → per client **Workspaces** + **Team** → send **only** user login + `https://your-domain`.
 
-1. Deploy once to your **cheapest suitable** server + domain (see **README → Deployment** and “Cheap domain hosting plan” below).
-2. In admin: **Branding** — set product name/logo so the login page looks like **your** product for all clients (or one brand per deployment if you run separate installs per client).
-3. Per client company: **Workspaces** → new workspace → **Team** → create users → send them **only** `https://your-domain.com` (or your chosen path) + user credentials.
-4. Optional: use **workspace name / plan / limits** to separate clients on one server (multi-tenant) or run **one VPS per big client** if they pay for isolation.
+End clients **do not** use this install guide — browser only.
 
-**End clients do not follow this file for installation** — they only need a browser. This guide is for **you** installing and operating the stack.
+---
 
-## Cheap domain hosting plan (starter)
+## Cheap domain + hosting (starter)
 
-Goal: **minimum spend** while staying professional (HTTPS, your domain).
+1. **Domain** — compare registrars / promos.
+2. **VPS** — 1 vCPU, 1–2 GB RAM is enough for many pilots (API + static UI + optional Ollama), or split **static host** (Pages/Netlify) + **API** (Railway/Render/small VPS).
+3. **HTTPS** — Caddy, nginx + Certbot, or Cloudflare proxy.
+4. **Secrets** — strong `SECRET_KEY`, `CORS_ORIGINS` = real UI origins.
 
-1. **Domain:** pick a budget registrar; often **\$1–\$15/year** on promo (prices change — compare `.com` / `.in` / your country TLD).
-2. **Hosting:** smallest **VPS** (1 vCPU, 1–2 GB RAM) is enough for many small B2B pilots — run API + reverse proxy + optional Ollama on same box, or use **cloud LLM** (OpenAI) for Pro workspaces to avoid heavy GPU on the server.
-3. **Frontend:** `npm run build` → serve `frontend/dist` via **Caddy** or **nginx** on the same VPS, or host static files on **Cloudflare Pages** / **Netlify** (often free tier) and point `VITE_API_URL` at your API subdomain (e.g. `api.yourdomain.com`).
-4. **DNS:** `A` record to VPS IP, or CNAME to PaaS; enable **HTTPS**.
-5. **Secrets:** strong `SECRET_KEY`, unique admin password, `CORS_ORIGINS` = your real UI origin(s).
+---
 
-You can start with **one cheap domain + one small VPS** for many workspace clients before upgrading.
+## 1. Prerequisites
 
-## 1. Install prerequisites
+| Tool | Notes |
+|------|--------|
+| **Python 3.11+** | [python.org](https://www.python.org/downloads/) — Windows: *Add to PATH*. |
+| **Node.js 18+** | [nodejs.org](https://nodejs.org/) LTS. |
+| **Ollama** (local AI) | [ollama.com](https://ollama.com) — then e.g. `ollama pull llama3.2` (match `OLLAMA_MODEL`, e.g. `llama3.2:latest`). |
 
-1. **Python 3.11 or newer** — from [python.org](https://www.python.org/downloads/). During setup on Windows, enable **“Add python.exe to PATH”**.
-2. **Node.js 18+** (includes npm) — from [nodejs.org](https://nodejs.org/).
-3. **Ollama** (for local AI follow-ups) — from [ollama.com](https://ollama.com). After install, run once in a terminal:
-
-   ```bash
-   ollama pull llama3.2
-   ```
-
-   (Or another model; match the name in `backend/.env` as `OLLAMA_MODEL`.)
+---
 
 ## 2. Get the project
 
-Copy the `ai-sales-agent` folder to the machine (zip, git clone, or shared drive).
+Clone or copy the **`ai-sales-agent`** folder onto the machine.
+
+---
 
 ## 3. Backend setup
 
-Open **PowerShell** or **Command Prompt**:
+### Windows (PowerShell or CMD)
 
 ```powershell
 cd path\to\ai-sales-agent\backend
 python -m venv ..\.venv
 ..\.venv\Scripts\activate
+pip install -U pip
 pip install -r requirements.txt
 copy .env.example .env
 ```
 
-Edit **`backend\.env`**:
+### Linux / macOS
 
-| Variable | What to set |
-|----------|-------------|
-| `SECRET_KEY` | Long random string (required for production). |
-| `BOOTSTRAP_ADMIN_EMAIL` | First admin sign-in email. |
-| `BOOTSTRAP_ADMIN_PASSWORD` | First admin password (change after first login). |
-| `DATABASE_URL` | Default SQLite is fine: `sqlite:///./app.db`. |
-| `PORT` or `BACKEND_PORT` | API port (often `8000`). |
-| `OLLAMA_URL` | Usually `http://127.0.0.1:11434`. |
-| `OLLAMA_MODEL` | e.g. `llama3.2` (must exist in Ollama). |
-| `MODE` | `local` = only Ollama. `api` = allow OpenAI for **Pro** workspaces that use API mode and keys. |
-| `OPENAI_API_KEY` | Optional; used when workspace is **Pro** and configured for API mode. |
-| `CORS_ORIGINS` | Add your UI origin if not localhost (comma-separated). |
+```bash
+cd /path/to/ai-sales-agent/backend
+python3 -m venv ../.venv
+source ../.venv/bin/activate
+pip install -U pip
+pip install -r requirements.txt
+cp .env.example .env
+```
+
+### Edit `backend/.env`
+
+| Variable | Purpose |
+|----------|---------|
+| `SECRET_KEY` | Long random string (**required** in production). |
+| `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` | First admin (change after login). |
+| `DATABASE_URL` | Default SQLite: `sqlite:///./app.db`. For Postgres use `postgresql+psycopg2://...` and install `psycopg2-binary`. |
+| `PORT` or `BACKEND_PORT` | API port (`0` = auto from 8000 when using `run_prod.py` / `ports.env`). |
+| `OLLAMA_URL` or `OLLAMA_BASE_URL` | Ollama HTTP base, e.g. `http://127.0.0.1:11434`. |
+| `OLLAMA_MODEL` | e.g. `llama3.2:latest` (must exist in `ollama list`). |
+| `MODE` | `local` = Ollama only; `api` = OpenAI allowed for **Pro** workspaces with API mode + key. |
+| `OPENAI_API_KEY` | Optional global key. |
+| `CORS_ORIGINS` | Extra UI origins, comma-separated (dev localhosts are often built-in). |
+
+---
 
 ## 4. Frontend setup
+
+### Windows
 
 ```powershell
 cd path\to\ai-sales-agent\frontend
@@ -83,56 +100,127 @@ npm install
 copy .env.example .env
 ```
 
-Edit **`frontend\.env`**:
+### Linux / macOS
 
-- **`VITE_API_URL`** — Backend base URL, e.g. `http://127.0.0.1:8000` (no path suffix).  
-  For local dev you can **leave it unset** to use the Vite `/api` proxy (see `VITE_PROXY_TARGET` in `.env.example`).
-- **`VITE_DEV_PORT`** — Dev UI port (default `5173`).
+```bash
+cd /path/to/ai-sales-agent/frontend
+npm install
+cp .env.example .env
+```
 
-## 5. Run the system
+### Edit `frontend/.env` (development)
 
-From the **`ai-sales-agent`** folder (repo root):
+- **`VITE_API_URL`** — Full backend origin, no path (e.g. `http://127.0.0.1:8000`). Leave unset to use Vite’s `/api` proxy (see `.env.example` and repo-root `.backend-port`).
+- **`VITE_DEV_PORT`** — UI dev port (default `5173`).
+- **`VITE_PROXY_TARGET`** — Override proxy target if needed.
+
+### Production build (hosting)
+
+Set the **public** API URL **at build time**:
+
+```bash
+cd frontend
+export VITE_API_URL=https://api.yourdomain.com   # Linux/macOS
+# Windows PowerShell: $env:VITE_API_URL="https://api.yourdomain.com"
+npm ci
+npm run build
+```
+
+Output: **`frontend/dist/`** — upload or serve from nginx/Caddy/Cloudflare Pages.
+
+---
+
+## 5. Run locally
+
+### Windows — one click
+
+From repo root:
 
 ```text
 start.bat
 ```
 
-This starts the API, the Vite dev server (minimized windows), checks Ollama, and opens the browser at `http://localhost:5173`.
+Starts backend (`run_prod.py`), Vite dev server (minimized), checks Ollama, opens browser. Default UI: **http://localhost:5173**.
 
-Manual alternative:
+### Manual (any OS)
 
-```powershell
-# Terminal 1
+**Terminal 1 — API**
+
+```bash
 cd backend
-..\.venv\Scripts\activate
-python run_dev.py
+source ../.venv/bin/activate    # or ..\.venv\Scripts\activate on Windows
+python run_dev.py                 # hot reload, or run_prod.py for prod-style port file
+```
 
-# Terminal 2
+**Terminal 2 — UI**
+
+```bash
 cd frontend
 npm run dev
 ```
 
+---
+
 ## 6. Admin login
 
-1. Open the app URL (e.g. `http://localhost:5173`).
-2. Sign in with **`BOOTSTRAP_ADMIN_EMAIL`** / **`BOOTSTRAP_ADMIN_PASSWORD`** from `backend\.env`.
-3. Go to **Branding** (admin account) and configure **SMTP** if you want transactional emails (new user, password changed, password request acknowledgment, etc.).
-
-## 7. Create a workspace and users
-
-1. **Workspaces** — create a workspace; set plan **Free** or **Pro** (Pro allows OpenAI when `MODE=api` and workspace AI mode is API with a key).
-2. **Team** — add users with email and password; they sign in on the same URL as **workspace users** (not admin).
-3. Optional: **Email templates** — customize subjects and HTML bodies under **Email templates**.
-
-## 8. Production build (optional)
-
-```powershell
-cd frontend
-npm run build
-```
-
-Serve the `frontend/dist` static files with nginx, Caddy, or similar, and run the API with Uvicorn behind a process manager. Point `VITE_API_URL` at the public API URL in a **production** frontend env if you rebuild the bundle.
+1. Open the app URL.
+2. Sign in with `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD`.
+3. **Branding** — set SMTP for transactional email (optional but recommended).
 
 ---
 
-For a shorter, non-technical checklist, see **`SIMPLE_START.md`** in this folder.
+## 7. Workspaces and users
+
+1. **Workspaces** — Free / Pro, expiry, limits.
+2. **Team** — create **user** accounts (same URL as customers).
+3. **Email templates** — optional customization.
+
+---
+
+## 8. Hosting on a server (production)
+
+Use this after local setup works. Goal: **HTTPS**, stable API, static UI.
+
+### 8.1 Layout
+
+- **API:** Python venv on server, Uvicorn listening on **127.0.0.1:8000** (example).
+- **UI:** `frontend/dist` served by **nginx** or **Caddy** on **443**.
+- **TLS:** Let’s Encrypt (e.g. `certbot --nginx`).
+
+### 8.2 Deploy steps (summary)
+
+1. Clone repo to e.g. `/opt/ai-sales-agent`.
+2. Create venv, `pip install -r backend/requirements.txt`.
+3. Configure **`backend/.env`** (production `SECRET_KEY`, `CORS_ORIGINS`, `DATABASE_URL`, `OLLAMA_URL`, etc.).
+4. On build machine or CI: `npm ci && VITE_API_URL=https://api.yourdomain.com npm run build` → deploy **`dist/`** to the web root.
+5. **systemd** unit for Uvicorn (or `uvicorn main:app` from `backend/` with correct `WorkingDirectory`).
+6. **nginx:** `location /` → static files; `location /` API host or separate `api.` subdomain → `proxy_pass http://127.0.0.1:8000`.
+7. Restrict admin SSH; firewall **22**, **80**, **443** only as needed.
+
+### 8.3 Ollama on the same VPS
+
+Install Ollama, pull model, keep `OLLAMA_URL=http://127.0.0.1:11434` if the API runs on the same OS. If the API is in **Docker**, use the host-reachable URL (e.g. `http://host.docker.internal:11434` where supported).
+
+### 8.4 Postgres (optional)
+
+Set `DATABASE_URL=postgresql+psycopg2://user:pass@host/dbname`, install **`psycopg2-binary`** (see comment in `backend/requirements.txt`), redeploy.
+
+### 8.5 Automating future deploys
+
+Follow **[`CI_CD_DEPLOYMENT_GUIDE.md`](./CI_CD_DEPLOYMENT_GUIDE.md)** for GitHub Actions, SSH deploy, backups, and rollback.
+
+---
+
+## 9. Troubleshooting
+
+| Issue | What to check |
+|-------|----------------|
+| **Module not found** | Same Python as venv; `pip install -r backend/requirements.txt`. |
+| **CORS errors** | `CORS_ORIGINS` includes your exact UI origin (scheme + host + port). |
+| **Wrong API port** | If `BACKEND_PORT=0`, read repo-root `.backend-port` or backend window; align `VITE_API_URL` / proxy. |
+| **Ollama unreachable** | Service running; URL correct; Docker vs host `localhost` mismatch. |
+| **No email** | Branding SMTP; **Logs** for `EMAIL` entries. |
+
+---
+
+For the shortest non-technical checklist, see **[`SIMPLE_START.md`](./SIMPLE_START.md)**.

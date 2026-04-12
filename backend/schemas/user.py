@@ -16,12 +16,13 @@ class UserOut(BaseModel):
     display_name: str | None = None
     phone: str | None = None
     is_active: bool = True
+    ai_message_limit: int | None = None
 
     model_config = {"from_attributes": True}
 
 
 class UserListItemOut(UserOut):
-    """User row in admin list with workspace AI quota snapshot (shared per workspace)."""
+    """User row in admin list with per-user AI cap vs workspace master."""
 
     workspace_plan_type: str = "free"
     workspace_ai_limit: int = 0
@@ -33,6 +34,7 @@ class UserAdminPatch(BaseModel):
     is_active: bool | None = None
     display_name: str | None = Field(default=None, max_length=120)
     plan: Literal["free", "pro"] | None = None
+    ai_message_limit: int | None = Field(default=None, ge=0)
 
 
 class AdminUserPasswordSet(BaseModel):

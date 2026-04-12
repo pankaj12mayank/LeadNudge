@@ -13,6 +13,9 @@ class WorkspaceOut(BaseModel):
     name: str
     plan_type: str
     plan_expires_at: datetime | None = None
+    # From workspace settings (one query with join — avoids N admin GET /settings calls)
+    ai_mode: str | None = None
+    usage_limit: int | None = None
 
     model_config = {"from_attributes": True}
 

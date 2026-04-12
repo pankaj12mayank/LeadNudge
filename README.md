@@ -2,7 +2,14 @@
 
 Single-repo SaaS-style app: **FastAPI** backend, **React (Vite)** UI for **admin** and **workspace users**, multi-tenant **workspaces**, **local AI** via **Ollama**, and optional **OpenAI** for **Pro** plans.
 
-**Documentation:** detailed setup → [`CLIENT_SETUP.md`](./CLIENT_SETUP.md) · plain-language steps → [`SIMPLE_START.md`](./SIMPLE_START.md)
+## Documentation map
+
+| Document | Purpose |
+|----------|---------|
+| **[`SIMPLE_START.md`](./SIMPLE_START.md)** | Short paths: **local** (Windows / Mac / Linux) vs **hosting on a server** |
+| **[`CLIENT_SETUP.md`](./CLIENT_SETUP.md)** | Full install: commands, `.env`, production build, server hosting, troubleshooting |
+| **[`CI_CD_DEPLOYMENT_GUIDE.md`](./CI_CD_DEPLOYMENT_GUIDE.md)** | **Zero → production CI/CD**: VPS layout, systemd, TLS, GitHub Actions outline, rollback |
+| **This README** | Features, configuration tables, architecture, testing |
 
 ## B2B model (sell to clients — user portal only)
 
@@ -32,12 +39,12 @@ Details: [`CLIENT_SETUP.md`](./CLIENT_SETUP.md) (B2B + cheap hosting plan) and [
 
 ## Quick start (Windows)
 
-1. **Backend:** Python 3.11+, `pip install -r backend/requirements.txt`, copy `backend/.env.example` → `backend/.env`, set `BOOTSTRAP_ADMIN_*` and `SECRET_KEY`.
-2. **Frontend:** Node 18+, `npm install` in `frontend/`, copy `frontend/.env.example` → `frontend/.env`.
-3. **Ollama:** install and `ollama pull` a model (match `OLLAMA_MODEL` in `backend/.env`).
+1. **Backend:** Python 3.11+, create a venv, `pip install -r backend/requirements.txt`, copy `backend/.env.example` → `backend/.env`, set `BOOTSTRAP_ADMIN_*` and `SECRET_KEY`.
+2. **Frontend:** Node 18+, `npm install` in `frontend/`, copy `frontend/.env.example` → `frontend/.env` (optional for dev proxy; see file comments).
+3. **Ollama:** install and `ollama pull` a model (match `OLLAMA_MODEL` in `backend/.env`, e.g. `llama3.2:latest`).
 4. From repo root: run **`start.bat`**.
 
-See [`CLIENT_SETUP.md`](./CLIENT_SETUP.md) for exact commands.
+See [`SIMPLE_START.md`](./SIMPLE_START.md) and [`CLIENT_SETUP.md`](./CLIENT_SETUP.md) for step-by-step commands (including **Linux/macOS** and **server** deploy).
 
 ## Configuration
 
@@ -47,7 +54,7 @@ See [`CLIENT_SETUP.md`](./CLIENT_SETUP.md) for exact commands.
 |-------|---------|-----------------|
 | API | `8000` | `backend/.env`: `PORT` or `BACKEND_PORT`. `0` = auto-pick free port from 8000 (`run_prod.py` writes repo-root `.backend-port`). |
 | UI (dev) | `5173` | `frontend/.env`: `VITE_DEV_PORT` |
-| Ollama | `11434` | Ollama app / `OLLAMA_URL` in `backend/.env` |
+| Ollama | `11434` | Ollama app / `OLLAMA_URL` or `OLLAMA_BASE_URL` in `backend/.env` |
 
 Repo root **`ports.env`** (optional) can override `BACKEND_PORT` for `start.bat` / `run_prod.py`.
 
@@ -58,8 +65,8 @@ Repo root **`ports.env`** (optional) can override `BACKEND_PORT` for `start.bat`
 | `DATABASE_URL` | SQLite default `sqlite:///./app.db` |
 | `SECRET_KEY` | JWT signing secret (required in production) |
 | `MODE` | `local` = **always Ollama** (no OpenAI). `api` = OpenAI allowed only for **Pro** workspaces with API mode + key |
-| `OLLAMA_URL` | Ollama base URL |
-| `OLLAMA_MODEL` | Model name for generate/chat |
+| `OLLAMA_URL` or `OLLAMA_BASE_URL` | Ollama HTTP base (same setting; two names supported) |
+| `OLLAMA_MODEL` | Model tag for generate/chat (e.g. `llama3.2:latest`) |
 | `OPENAI_API_KEY` | Optional global key; workspace key preferred when set |
 | `PORT` / `BACKEND_PORT` | API listen port |
 | `CORS_ORIGINS` | Extra browser origins, comma-separated |
@@ -86,7 +93,7 @@ Failures are logged under **EMAIL** in system logs and sent-mail log where appli
 
 1. Install Ollama and ensure `ollama serve` is running (or use the desktop app).
 2. `ollama pull <model>` matching `OLLAMA_MODEL`.
-3. Set `OLLAMA_URL` if not on localhost:11434.
+3. Set `OLLAMA_URL` or `OLLAMA_BASE_URL` if not on `http://localhost:11434` (e.g. API in Docker → host Ollama: `http://host.docker.internal:11434` on Windows/Mac where supported).
 
 ### OpenAI (Pro only)
 
@@ -115,11 +122,13 @@ Failures are logged under **EMAIL** in system logs and sent-mail log where appli
 
 ## Deployment
 
+**End-to-end production + CI/CD:** see **[`CI_CD_DEPLOYMENT_GUIDE.md`](./CI_CD_DEPLOYMENT_GUIDE.md)** (VPS, systemd, nginx/Caddy, GitHub Actions skeleton, secrets, rollback).
+
 ### Local / LAN
 
-- Backend: `python backend/run_dev.py` (reload) or `python backend/run_prod.py` (no reload, port file).
+- Backend: `python backend/run_dev.py` (reload) or `python backend/run_prod.py` (no reload, port file; repo-root `.backend-port` when `BACKEND_PORT=0`).
 - Frontend dev: `npm run dev` in `frontend/`.
-- Production UI: `npm run build` and serve `frontend/dist` with any static host; point API URL via env at build time or reverse-proxy `/api` to the FastAPI app.
+- Production UI: `npm run build` with `VITE_API_URL=https://your-api-origin` and serve `frontend/dist` with any static host; ensure `CORS_ORIGINS` on the API includes your UI origin.
 
 ### Cheapest domain + host plan (B2B friendly)
 
@@ -130,7 +139,7 @@ Good enough for **early sales** when each client only uses the **user portal**:
 3. **HTTPS:** Caddy automatic TLS, nginx + Certbot, or Cloudflare proxy — avoid plain HTTP for clients.
 4. **You** use **admin** on that deployment; **clients** only get links + **user** logins you create.
 
-See **[`CLIENT_SETUP.md`](./CLIENT_SETUP.md)** → sections *B2B plan* and *Cheap domain hosting plan* for a short checklist.
+See **[`CLIENT_SETUP.md`](./CLIENT_SETUP.md)** (B2B, cheap hosting, **Hosting on a server**) and **[`SIMPLE_START.md`](./SIMPLE_START.md)** (local vs server overview).
 
 ### Cheap hosting options (typical pattern)
 
@@ -148,23 +157,28 @@ See **[`SIMPLE_START.md`](./SIMPLE_START.md)** (install Python, Node, Ollama →
 
 ```text
 ai-sales-agent/
-├── backend/           # FastAPI, SQLAlchemy, agents
-├── frontend/          # React + Vite + Tailwind
-├── start.bat          # Windows: backend + frontend + browser + Ollama check
-├── CLIENT_SETUP.md    # Detailed client setup
-├── SIMPLE_START.md    # Plain-language steps
+├── backend/                    # FastAPI, SQLAlchemy, agents; requirements.txt
+├── frontend/                 # React + Vite + Tailwind
+├── start.bat                   # Windows: backend + frontend + browser + Ollama check
+├── CLIENT_SETUP.md             # Detailed setup (local + server)
+├── SIMPLE_START.md             # Quick local vs hosting paths
+├── CI_CD_DEPLOYMENT_GUIDE.md   # Production deploy & CI/CD from zero
 └── README.md
 ```
+
+## Dependencies
+
+- **Backend:** `backend/requirements.txt` (Python 3.11+). Optional **Postgres:** uncomment `psycopg2-binary` there when using `postgresql://` / `postgresql+psycopg2://` in `DATABASE_URL`.
+- **Frontend:** `frontend/package.json` + `package-lock.json` — use `npm ci` in CI when lockfile is present.
 
 ## Testing
 
 From `backend/` (with venv activated):
 
 ```bash
+pip install -r requirements.txt
 pytest
 ```
-
-Includes schema and AI routing plan checks.
 
 ## Troubleshooting
 

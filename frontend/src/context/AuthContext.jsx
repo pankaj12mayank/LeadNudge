@@ -68,7 +68,7 @@ export function AuthProvider({ children }) {
     if (!token || role !== "user") return undefined;
     const id = window.setInterval(() => {
       refreshProfile().catch(() => {});
-    }, 45_000);
+    }, 60_000);
     return () => window.clearInterval(id);
   }, [token, role, refreshProfile]);
 

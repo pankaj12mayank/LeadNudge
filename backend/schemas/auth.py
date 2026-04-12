@@ -21,3 +21,6 @@ class MeOut(BaseModel):
     # Workspace user only — plan expiry does not block login; UI may show banners.
     workspace_plan_expired: bool = False
     workspace_plan_type: str | None = None
+    workspace_ai_messages_used: int = 0
+    workspace_ai_limit: int = 0
+    workspace_ai_quota_exhausted: bool = False

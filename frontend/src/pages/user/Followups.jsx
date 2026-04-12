@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import Card from "../../components/Card";
 import Table from "../../components/Table";
@@ -26,6 +26,7 @@ export default function Followups() {
   const [listLoading, setListLoading] = useState(false);
   const [rescheduleRow, setRescheduleRow] = useState(null);
   const [rescheduleAt, setRescheduleAt] = useState("");
+  const scheduleSubmitLock = useRef(false);
 
   const filteredLeads = useMemo(() => {
     const q = leadSearch.trim().toLowerCase();
@@ -97,30 +98,39 @@ export default function Followups() {
     }
   }, [page, limit]);
 
+  const loadFollowupsRef = useRef(loadFollowups);
+  useEffect(() => {
+    loadFollowupsRef.current = loadFollowups;
+  }, [loadFollowups]);
+
   useEffect(() => {
     loadFollowups();
   }, [loadFollowups]);
 
   useEffect(() => {
     const id = setInterval(() => {
-      loadFollowups();
-    }, 45_000);
+      loadFollowupsRef.current?.();
+    }, 60_000);
     return () => clearInterval(id);
-  }, [loadFollowups]);
+  }, []);
 
   async function onSchedule(e) {
     e.preventDefault();
+    if (scheduleSubmitLock.current || saving) {
+      return;
+    }
     if (!leadId || !scheduledAt) {
       toast.warning("Lead and schedule time required");
       return;
     }
-    // datetime-local is local wall time; toISOString() converts to UTC for the API.
+    // datetime-local is your local time; we send an absolute instant so the server runs at that time.
     const picked = new Date(scheduledAt);
     if (Number.isNaN(picked.getTime())) {
       toast.warning("Pick a valid date and time");
       return;
     }
     const iso = picked.toISOString();
+    scheduleSubmitLock.current = true;
     setSaving(true);
     try {
       await userService.createFollowup({
@@ -131,23 +141,29 @@ export default function Followups() {
         "Follow-up queued. The AI draft is created at the scheduled time from your lead note and thread.",
       );
       await loadFollowups();
-      try {
-        const l = await userService.listLeads(undefined, { page: 1, limit: 500 });
-        setLeads(l.items ?? []);
-      } catch {
-        /* ignore */
-      }
     } catch (e) {
       const msg = (e && e.message) || "";
+      if (e?.status === 409) {
+        toast.error("Already scheduled", {
+          description:
+            msg ||
+            "A pending follow-up for this lead is already set for that time. Choose another time or cancel the existing one.",
+          duration: 8_000,
+        });
+        return;
+      }
       const quota =
         e?.status === 403 ||
-        /quota|limit exhausted|administrator/i.test(msg);
+        /quota|limit exhausted|usage limit|plan has expired|administrator/i.test(
+          msg,
+        );
       toast.error(
         quota
           ? msg
           : "Temporary issue scheduling your follow-up. Please try again in a moment.",
       );
     } finally {
+      scheduleSubmitLock.current = false;
       setSaving(false);
     }
   }
@@ -215,7 +231,17 @@ export default function Followups() {
       setRescheduleRow(null);
       await loadFollowups();
     } catch (e) {
-      toast.error(e.message || "Could not reschedule.");
+      const msg = e?.message || "";
+      if (e?.status === 409) {
+        toast.error("Time slot taken", {
+          description:
+            msg ||
+            "Another pending follow-up for this lead is already set for that time.",
+          duration: 8_000,
+        });
+      } else {
+        toast.error(msg || "Could not reschedule.");
+      }
     }
   }
 
@@ -256,26 +282,6 @@ export default function Followups() {
       key: "scheduled_at",
       label: "Scheduled",
       render: (r) => formatScheduleDisplay(r.scheduled_at),
-    },
-    {
-      key: "send_window_hint",
-      label: "AI timing",
-      render: (r) => {
-        const h = (r.send_window_hint || "").toLowerCase();
-        const label =
-          h === "morning"
-            ? "Morning"
-            : h === "afternoon"
-              ? "Afternoon"
-              : h === "evening"
-                ? "Evening"
-                : h || "—";
-        return (
-          <span className="text-sm text-neutral-600 dark:text-neutral-400" title="Based on scheduled time (UTC hour)">
-            {label}
-          </span>
-        );
-      },
     },
     {
       key: "followup_type",
@@ -482,14 +488,8 @@ export default function Followups() {
                 disabled={saving}
               />
               <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                Uses your device timezone. The API stores UTC; the table below shows local time.
-              </p>
-              <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                <span className="font-medium text-neutral-600 dark:text-neutral-300">Smart timing:</span>{" "}
-                the model adjusts tone for <strong>Morning</strong>, <strong>Afternoon</strong>, or{" "}
-                <strong>Evening</strong> based on the <strong>UTC hour</strong> of the scheduled instant
-                (see &quot;AI timing&quot; column after you save). Pick a local time that lands in the
-                window you want in UTC, or schedule roughly morning / afternoon / evening UTC.
+                The draft is generated when this date and time arrives (same moment you picked — times in
+                the table use your device&apos;s locale).
               </p>
             </div>
           </div>

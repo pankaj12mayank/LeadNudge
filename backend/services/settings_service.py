@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from models.lead import Lead
 from models.message import Message
+from models.user import User
 from models.outbound_email import OutboundEmail
 from models.settings import WorkspaceSettings
 from models.workspace import Workspace
@@ -29,6 +30,24 @@ def count_workspace_ai_messages(db: Session, workspace_id: int) -> int:
     return _workspace_ai_message_count(db, workspace_id)
 
 
+def count_user_ai_messages(db: Session, user_id: int) -> int:
+    """AI messages attributed to this user (same workspace as the user)."""
+    u = db.get(User, user_id)
+    if not u:
+        return 0
+    wid = u.workspace_id
+    stmt = (
+        select(func.count())
+        .select_from(Message)
+        .join(Lead, Message.lead_id == Lead.id)
+        .where(
+            Message.created_by_user_id == user_id,
+            Lead.workspace_id == wid,
+        )
+    )
+    return int(db.execute(stmt).scalar_one())
+
+
 def _workspace_outbound_count(db: Session, workspace_id: int) -> int:
     stmt = (
         select(func.count())
@@ -47,7 +66,12 @@ def _smtp_configured(row: WorkspaceSettings) -> bool:
 
 
 def get_settings_out(
-    db: Session, workspace_id: int, *, mask_api_key: bool, mask_smtp_password: bool = True
+    db: Session,
+    workspace_id: int,
+    *,
+    mask_api_key: bool,
+    mask_smtp_password: bool = True,
+    for_user_id: int | None = None,
 ) -> SettingsOut:
     row = (
         db.query(WorkspaceSettings)
@@ -68,29 +92,49 @@ def get_settings_out(
     elif row.smtp_password:
         smtp_pw = "***"
 
-    used = _workspace_ai_message_count(db, workspace_id)
-    lim = max(0, int(row.usage_limit or 0))
     outbound_n = _workspace_outbound_count(db, workspace_id)
-    pct = (100.0 * used / lim) if lim > 0 else 0.0
-    near = lim > 0 and used >= int(lim * 0.9 + 0.9999) and used < lim
-    exhausted = lim > 0 and used >= lim
 
     from services import usage_alerts_service
-    from services.plan_access_service import workspace_plan_expired
+    from services.plan_access_service import (
+        ai_features_blocked,
+        portal_shows_plan_expired_notice,
+        user_ai_features_blocked,
+        user_ai_quota_exhausted,
+        user_effective_ai_limit,
+        workspace_ai_quota_exhausted,
+        workspace_usage_limit,
+    )
     from services.plan_expiry_notify_service import maybe_send_plan_expired_emails
 
     maybe_send_plan_expired_emails(db, workspace_id)
-    usage_alerts_service.sync_usage_threshold_emails(db, workspace_id)
+
+    master = workspace_usage_limit(db, workspace_id)
+    if for_user_id is not None:
+        usage_alerts_service.sync_user_usage_threshold_emails(db, for_user_id)
+        used = count_user_ai_messages(db, for_user_id)
+        lim = user_effective_ai_limit(db, for_user_id)
+        pct = (100.0 * used / lim) if lim > 0 else 0.0
+        near = lim > 0 and used >= int(lim * 0.9 + 0.9999) and used < lim
+        exhausted = user_ai_quota_exhausted(db, for_user_id)
+        features_blocked = user_ai_features_blocked(db, for_user_id)
+    else:
+        usage_alerts_service.sync_usage_threshold_emails(db, workspace_id)
+        used = _workspace_ai_message_count(db, workspace_id)
+        lim = master
+        pct = (100.0 * used / lim) if lim > 0 else 0.0
+        near = lim > 0 and used >= int(lim * 0.9 + 0.9999) and used < lim
+        exhausted = workspace_ai_quota_exhausted(db, workspace_id)
+        features_blocked = ai_features_blocked(db, workspace_id)
 
     ws_row = db.get(Workspace, workspace_id)
-    plan_exp = workspace_plan_expired(db, workspace_id)
-    features_blocked = plan_exp or exhausted
+    plan_exp = portal_shows_plan_expired_notice(db, workspace_id, for_user_id)
 
     return SettingsOut(
         workspace_id=row.workspace_id,
         ai_mode=row.ai_mode,
         api_key=key,
-        usage_limit=row.usage_limit,
+        usage_limit=lim,
+        workspace_master_ai_cap=master,
         ollama_model=row.ollama_model,
         smtp_host=row.smtp_host,
         smtp_port=row.smtp_port,

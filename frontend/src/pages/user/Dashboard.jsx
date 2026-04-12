@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import Card from "../../components/Card";
 import Table from "../../components/Table";
 import Badge from "../../components/Badge";
+import { useAuthContext } from "../../context/AuthContext";
 import { useSite } from "../../context/SiteContext";
 import * as userService from "../../services/userService";
 import {
@@ -31,11 +32,13 @@ function temperatureVariant(tag) {
 
 export default function Dashboard() {
   const { site } = useSite();
+  const { refreshProfile, role } = useAuthContext();
   const supportEmail = site?.support_email;
 
   const [usageUsed, setUsageUsed] = useState(0);
   const [usageLimit, setUsageLimit] = useState(0);
   const [usageNear, setUsageNear] = useState(false);
+  const [planExpired, setPlanExpired] = useState(false);
   const [outboundSent, setOutboundSent] = useState(0);
   const [usageLoading, setUsageLoading] = useState(true);
 
@@ -49,19 +52,31 @@ export default function Dashboard() {
   const [manualConversions, setManualConversions] = useState(0);
   const [manualSaving, setManualSaving] = useState(false);
 
+  const loadUsageRef = useRef(async () => {});
+
   const loadUsage = useCallback(async () => {
     try {
+      if (role === "user") {
+        await refreshProfile();
+      }
       const s = await userService.getSettings();
       setOutboundSent(s.outbound_emails_sent ?? 0);
       setUsageUsed(s.ai_messages_used ?? 0);
       setUsageLimit(s.usage_limit ?? 0);
       setUsageNear(Boolean(s.usage_near_limit));
+      setPlanExpired(Boolean(s.plan_expired));
+      if (!s.ai_quota_exhausted) {
+        sessionStorage.removeItem(SESSION_QUOTA_TOAST_KEY);
+      }
+      if (!s.plan_expired) {
+        sessionStorage.removeItem(SESSION_PLAN_EXPIRED_TOAST_KEY);
+      }
       if (
         s.plan_expired &&
         !sessionStorage.getItem(SESSION_PLAN_EXPIRED_TOAST_KEY)
       ) {
         sessionStorage.setItem(SESSION_PLAN_EXPIRED_TOAST_KEY, "1");
-        toast.error("Your plan has expired. Contact admin to upgrade.", {
+        toast.error("Your workspace plan has expired. Contact admin to renew.", {
           duration: 10_000,
         });
       } else if (
@@ -69,9 +84,9 @@ export default function Dashboard() {
         !sessionStorage.getItem(SESSION_QUOTA_TOAST_KEY)
       ) {
         sessionStorage.setItem(SESSION_QUOTA_TOAST_KEY, "1");
-        toast.error("AI message limit khatam ho chuka hai", {
+        toast.error("Your AI message limit has been reached", {
           description:
-            "Is period ke liye aapka AI message limit poora use ho gaya hai. Apne administrator se contact karke limit ya plan update karwayein.",
+            "You have used all AI messages allowed for this period. Ask your administrator to raise your limit or update the plan.",
           duration: 14_000,
         });
       }
@@ -80,7 +95,11 @@ export default function Dashboard() {
     } finally {
       setUsageLoading(false);
     }
-  }, []);
+  }, [refreshProfile, role]);
+
+  useEffect(() => {
+    loadUsageRef.current = loadUsage;
+  }, [loadUsage]);
 
   const loadDashboard = useCallback(async () => {
     setDashLoading(true);
@@ -111,10 +130,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     const id = setInterval(() => {
-      loadUsage();
-    }, 35000);
+      loadUsageRef.current?.();
+    }, 60_000);
     return () => clearInterval(id);
-  }, [loadUsage]);
+  }, []);
 
   async function onSaveManualStats(e) {
     e.preventDefault();
@@ -230,7 +249,7 @@ export default function Dashboard() {
         </p>
       </section>
 
-      {usageNear && usageLimit > 0 ? (
+      {usageNear && usageLimit > 0 && !planExpired ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
           <p className="font-medium">You are reaching your limit. Upgrade plan.</p>
           <p className="mt-1">
@@ -438,6 +457,14 @@ export default function Dashboard() {
               </p>
               <p className="mt-2 text-3xl font-semibold tabular-nums text-neutral-900 dark:text-neutral-100">
                 {usageLimit > 0 ? `${usageUsed} / ${usageLimit}` : usageUsed}
+              </p>
+              <p className="mt-2 text-xs font-medium text-neutral-600 dark:text-neutral-400">
+                Status:{" "}
+                {planExpired
+                  ? "Plan expired"
+                  : usageLimit > 0 && usageUsed >= usageLimit
+                    ? "Limit reached"
+                    : "Active"}
               </p>
             </div>
           </Card>

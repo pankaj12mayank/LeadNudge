@@ -99,11 +99,14 @@ export default function Login() {
       if (data.role === "user") {
         try {
           const s = await userService.getSettings();
-          if (s.plan_expired && !sessionStorage.getItem(SESSION_PLAN_EXPIRED_TOAST_KEY)) {
+          if (
+            s.plan_expired &&
+            !sessionStorage.getItem(SESSION_PLAN_EXPIRED_TOAST_KEY)
+          ) {
             sessionStorage.setItem(SESSION_PLAN_EXPIRED_TOAST_KEY, "1");
-            toast.error("Your plan has expired", {
+            toast.error("Your workspace plan has expired", {
               description:
-                "Contact your administrator to renew or upgrade. You can still use the dashboard; AI follow-ups stay disabled until the plan is active again.",
+                "Contact your administrator to renew under Admin → Workspaces. You can still use the dashboard.",
               duration: 12_000,
             });
           } else if (
@@ -111,9 +114,9 @@ export default function Login() {
             !sessionStorage.getItem(SESSION_QUOTA_TOAST_KEY)
           ) {
             sessionStorage.setItem(SESSION_QUOTA_TOAST_KEY, "1");
-            toast.error("AI message limit khatam ho chuka hai", {
+            toast.error("Your AI message limit has been reached", {
               description:
-                "Is period ke liye aapka AI message limit poora use ho gaya hai. Apne administrator se contact karke limit ya plan update karwayein.",
+                "You have used all AI messages allowed for this period. Ask your administrator to raise your limit or update the plan.",
               duration: 14_000,
             });
           }

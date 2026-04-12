@@ -1,37 +1,48 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useAuthContext } from "../context/AuthContext";
 import { useSite } from "../context/SiteContext";
 import * as userService from "../services/userService";
 
-/** Sticky alert when workspace AI quota is exhausted (scheduling blocked until admin raises limit). */
+/** Plan expiry vs quota — matches GET /settings flags (refreshed on interval / tab focus). */
 export default function UsageLimitBanner() {
   const { site } = useSite();
+  const { role, refreshProfile } = useAuthContext();
   const supportEmail = site?.support_email;
   const [planExpired, setPlanExpired] = useState(false);
   const [exhausted, setExhausted] = useState(false);
 
+  const refreshQuotaState = useCallback(async () => {
+    try {
+      if (role === "user") {
+        await refreshProfile();
+      }
+      const s = await userService.getSettings();
+      setPlanExpired(Boolean(s.plan_expired));
+      setExhausted(Boolean(s.ai_quota_exhausted));
+    } catch {
+      setPlanExpired(false);
+      setExhausted(false);
+    }
+  }, [refreshProfile, role]);
+
   useEffect(() => {
     let cancelled = false;
     async function tick() {
-      try {
-        const s = await userService.getSettings();
-        if (!cancelled) {
-          setPlanExpired(Boolean(s.plan_expired));
-          setExhausted(Boolean(s.ai_quota_exhausted));
-        }
-      } catch {
-        if (!cancelled) {
-          setPlanExpired(false);
-          setExhausted(false);
-        }
-      }
+      if (cancelled) return;
+      await refreshQuotaState();
     }
     tick();
-    const id = setInterval(tick, 45_000);
+    const id = setInterval(tick, 60_000);
+    const onVis = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVis);
     return () => {
       cancelled = true;
       clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
     };
-  }, []);
+  }, [refreshQuotaState]);
 
   if (!planExpired && !exhausted) return null;
 
@@ -43,8 +54,9 @@ export default function UsageLimitBanner() {
       >
         <p className="font-semibold">Workspace plan expired</p>
         <p className="mt-1">
-          AI follow-ups and generated messages are disabled until your administrator renews the
-          plan (Admin → Workspaces). You can still sign in and use the rest of the dashboard.
+          AI follow-ups and generated messages are disabled until your administrator renews the plan
+          (Admin → Workspaces) or restores your usage allowance. You can still sign in and use the rest
+          of the dashboard.
         </p>
         {supportEmail ? (
           <p className="mt-2">
@@ -62,11 +74,10 @@ export default function UsageLimitBanner() {
       className="border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-950 dark:border-red-900/60 dark:bg-red-950/50 dark:text-red-100"
       role="alert"
     >
-      <p className="font-semibold">AI message quota exhausted</p>
+      <p className="font-semibold">AI message limit reached</p>
       <p className="mt-1">
-        New AI follow-ups cannot be scheduled until your administrator increases your workspace
-        limit (Admin → AI setup). Please contact your administrator to upgrade or extend your
-        monthly allowance.
+        You cannot schedule new AI follow-ups until your administrator raises your AI message limit
+        (Admin → Users) or the workspace cap (Admin → AI setup).
       </p>
       {supportEmail ? (
         <p className="mt-2">

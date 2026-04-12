@@ -39,6 +39,7 @@ def get_sales_dashboard(
         q_leads = q_leads.filter(Lead.created_at < _next_day_start_utc(date_to))
 
     total_leads = q_leads.count()
+    recent_leads = q_leads.order_by(Lead.id.desc()).limit(12).all()
 
     fq = (
         db.query(func.count(Followup.id))
@@ -60,19 +61,6 @@ def get_sales_dashboard(
     manual_conversions = (
         int(settings_row.dashboard_manual_conversions or 0) if settings_row else 0
     )
-
-    recent_lead_q = db.query(Lead).filter(Lead.workspace_id == workspace_id)
-    if st:
-        recent_lead_q = recent_lead_q.filter(Lead.status == st)
-    if date_from is not None:
-        recent_lead_q = recent_lead_q.filter(
-            Lead.created_at >= _day_start_utc(date_from)
-        )
-    if date_to is not None:
-        recent_lead_q = recent_lead_q.filter(
-            Lead.created_at < _next_day_start_utc(date_to)
-        )
-    recent_leads = recent_lead_q.order_by(Lead.id.desc()).limit(12).all()
 
     recent_fu_q = (
         db.query(Followup)

@@ -41,7 +41,7 @@ export default function FollowupReminderListener() {
     };
 
     tick();
-    const id = setInterval(tick, 45_000);
+    const id = setInterval(tick, 60_000);
     return () => clearInterval(id);
   }, []);
 

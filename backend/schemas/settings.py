@@ -10,6 +10,7 @@ class SettingsOut(BaseModel):
     ai_mode: str
     api_key: str | None
     usage_limit: int
+    workspace_master_ai_cap: int = 0
     ollama_model: str | None = None
     smtp_host: str | None = None
     smtp_port: int | None = None

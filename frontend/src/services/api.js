@@ -45,7 +45,9 @@ api.interceptors.response.use(
         lower.includes("ai message quota") ||
         (lower.includes("quota") && lower.includes("exhausted")) ||
         lower.includes("workspace plan has expired") ||
-        lower.includes("ai follow-ups and message generation are disabled")
+        lower.includes("ai follow-ups and message generation are disabled") ||
+        lower.includes("your usage limit is reached") ||
+        lower.includes("your plan has expired")
       ) {
         const error = new Error(msg);
         error.status = status;

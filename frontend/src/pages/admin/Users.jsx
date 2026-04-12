@@ -252,7 +252,7 @@ export default function Users() {
     },
     {
       key: "ai_quota",
-      label: "AI quota (workspace)",
+      label: "AI messages",
       render: (r) => (
         <div className="flex max-w-[11rem] flex-col gap-1 text-xs">
           <span className="text-neutral-700 dark:text-neutral-300">
@@ -270,7 +270,7 @@ export default function Users() {
               setLimitInput(String(r.workspace_ai_limit ?? 0));
             }}
           >
-            Set workspace limit
+            Set AI message limit
           </button>
         </div>
       ),
@@ -333,9 +333,10 @@ export default function Users() {
         <p className="mt-2 w-full text-sm text-neutral-600 dark:text-neutral-400">
           Invite people to the Free or Pro workspace. Use <strong>Set password</strong> when a user
           requested help from the sign-in page — they are emailed the new password if SMTP is set up.
-          AI message limits are per <strong>workspace</strong>; when the limit is reached, users stay
-          signed in but cannot schedule new AI follow-ups until you raise the limit (or change the pool
-          plan under Workspaces). Changing a limit here updates the user dashboard usage immediately.
+          New users get their first AI message limit from <strong>Admin → AI setup</strong> (global for
+          that workspace). You can change any user&apos;s limit below — that only affects that user.
+          When someone hits their limit they stay signed in but cannot schedule AI follow-ups until you
+          raise it.
         </p>
       </section>
 
@@ -491,16 +492,14 @@ export default function Users() {
           aria-modal="true"
         >
           <Card
-            title="Workspace AI message limit"
+            title="AI message limit"
             className="relative z-10 w-full max-w-md shadow-xl"
           >
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              Applies to everyone in{" "}
-              <strong>
-                {workspaceLabel(wsById[limitRow.workspace_id]?.name) || `workspace #${limitRow.workspace_id}`}
-              </strong>
-              . Current usage: {(limitRow.workspace_ai_used ?? 0).toLocaleString()} messages sent
-              (unchanged when you only change the cap).
+              <strong>{limitRow.email}</strong> — this user has sent{" "}
+              {(limitRow.workspace_ai_used ?? 0).toLocaleString()} AI messages (counted toward their
+              cap). Changing the limit does not reset usage. New users start from the limit in{" "}
+              <strong>AI setup</strong> for their workspace.
             </p>
             <div className="mt-4">
               <label className="form-label">New limit (messages)</label>
@@ -555,11 +554,8 @@ export default function Users() {
                   }
                   setLimitSaving(true);
                   try {
-                    await adminService.updateAdminSettings({
-                      workspace_id: limitRow.workspace_id,
-                      usage_limit: n,
-                    });
-                    toast.success("AI message limit updated. Users see new cap on refresh.");
+                    await adminService.patchUser(limitRow.id, { ai_message_limit: n });
+                    toast.success("AI message limit updated.");
                     setLimitRow(null);
                     setLimitInput("");
                     await loadUsers();

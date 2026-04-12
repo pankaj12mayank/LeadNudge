@@ -13,7 +13,6 @@ from schemas.pagination import PaginationParams
 from schemas.settings import AdminSettingsUpdate
 from schemas.user import UserAdminPatch, UserCreate, UserListItemOut
 from services import usage_history_service
-from services.settings_service import count_workspace_ai_messages
 from schemas.workspace import WorkspacePlanUpdate
 from services import system_log_service, template_mail_service as tm
 
@@ -65,6 +64,21 @@ def list_workspaces(db: Session) -> list[Workspace]:
     )
 
 
+def list_workspaces_with_settings(
+    db: Session,
+) -> list[tuple[Workspace, WorkspaceSettings | None]]:
+    """Fixed workspaces plus settings row in one round-trip (admin UI)."""
+    return (
+        db.query(Workspace, WorkspaceSettings)
+        .outerjoin(
+            WorkspaceSettings, WorkspaceSettings.workspace_id == Workspace.id
+        )
+        .filter(Workspace.name.in_([FREE_WORKSPACE_NAME, PRO_WORKSPACE_NAME]))
+        .order_by(Workspace.id)
+        .all()
+    )
+
+
 def workspace_for_plan(db: Session, plan: Literal["free", "pro"]) -> Workspace:
     name = FREE_WORKSPACE_NAME if plan == "free" else PRO_WORKSPACE_NAME
     ws = db.query(Workspace).filter(Workspace.name == name).first()
@@ -87,6 +101,10 @@ def create_user(db: Session, data: UserCreate) -> User:
         workspace_id=ws.id,
     )
     db.add(user)
+    db.commit()
+    db.refresh(user)
+    st = get_workspace_settings(db, ws.id)
+    user.ai_message_limit = max(0, int(st.usage_limit or 0))
     db.commit()
     db.refresh(user)
     pv = tm.project_variables(db)
@@ -141,27 +159,26 @@ def list_users(
 def users_with_workspace_quota_context(
     db: Session, users: list[User]
 ) -> list[UserListItemOut]:
-    """Attach workspace plan + AI quota snapshot (usage is per workspace, same for all members)."""
+    """Attach per-user AI usage vs effective cap."""
+    from services.plan_access_service import (
+        user_ai_quota_exhausted,
+        user_effective_ai_limit,
+    )
+    from services.settings_service import count_user_ai_messages
+
     if not users:
         return []
     wids = list({u.workspace_id for u in users})
     workspaces = {
         w.id: w for w in db.query(Workspace).filter(Workspace.id.in_(wids)).all()
     }
-    settings_map = {
-        r.workspace_id: r
-        for r in db.query(WorkspaceSettings).filter(
-            WorkspaceSettings.workspace_id.in_(wids)
-        ).all()
-    }
-    used_map = {wid: count_workspace_ai_messages(db, wid) for wid in wids}
     out: list[UserListItemOut] = []
     for u in users:
         ws = workspaces.get(u.workspace_id)
-        st = settings_map.get(u.workspace_id)
-        lim = max(0, int(st.usage_limit or 0)) if st else 0
-        used = used_map.get(u.workspace_id, 0)
-        exhausted = lim > 0 and used >= lim
+
+        lim = user_effective_ai_limit(db, u.id)
+        used = count_user_ai_messages(db, u.id)
+        exhausted = user_ai_quota_exhausted(db, u.id)
         p = (ws.plan_type or "free").lower() if ws else "free"
         out.append(
             UserListItemOut(
@@ -171,6 +188,7 @@ def users_with_workspace_quota_context(
                 display_name=u.display_name,
                 phone=u.phone,
                 is_active=u.is_active,
+                ai_message_limit=u.ai_message_limit,
                 workspace_plan_type=p,
                 workspace_ai_limit=lim,
                 workspace_ai_used=used,
@@ -378,6 +396,8 @@ def patch_user(
     *,
     changed_by: int | None = None,
 ) -> User:
+    from services.plan_access_service import user_effective_ai_limit
+
     u = db.get(User, user_id)
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
@@ -390,6 +410,32 @@ def patch_user(
         u.is_active = data.is_active
     if data.display_name is not None:
         u.display_name = data.display_name.strip() or None
+
+    if "ai_message_limit" in data.model_fields_set:
+        old_eff = user_effective_ai_limit(db, u.id)
+        if data.ai_message_limit is None:
+            u.ai_message_limit = None
+        else:
+            u.ai_message_limit = max(0, int(data.ai_message_limit))
+        u.usage_email_90_sent = False
+        u.usage_email_limit_sent = False
+        db.flush()
+        new_eff = user_effective_ai_limit(db, u.id)
+        if old_eff != new_eff:
+            ws = db.get(Workspace, u.workspace_id)
+            usage_history_service.append_entry(
+                db,
+                user_id=u.id,
+                workspace_id=u.workspace_id,
+                action_type=usage_history_service.ACTION_LIMIT_UPDATE,
+                old_limit=old_eff,
+                new_limit=new_eff,
+                plan_type=(ws.plan_type or "free").lower() if ws else None,
+                expiry_date=ws.plan_expires_at if ws else None,
+                changed_by=changed_by,
+                summary="Admin set your personal AI message cap.",
+            )
+
     db.commit()
     db.refresh(u)
     if data.is_active is not None and was_active != u.is_active:

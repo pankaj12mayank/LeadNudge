@@ -1,3 +1,4 @@
+import re
 import shutil
 import subprocess
 
@@ -223,6 +224,16 @@ def _ollama_generate_once(prompt: str, model: str) -> str:
     )
 
 
+def _ollama_admin_test_reply_ok(text: str | None) -> bool:
+    """True if the model clearly answered the admin ping (expects the word OK)."""
+    t = clean_text(text)
+    if not t:
+        return False
+    if t.strip().lower() == (FALLBACK_FOLLOWUP_BODY or "").strip().lower():
+        return False
+    return bool(re.search(r"\bok\b", t.lower()))
+
+
 def run_ollama_admin_test(
     prompt: str,
     model: str | None = None,
@@ -241,50 +252,74 @@ def run_ollama_admin_test(
             None,
             m,
         )
-    with httpx.Client(timeout=OLLAMA_TIMEOUT) as client:
-        ok_h, err_h = ollama_health_reachable(client, base)
-        if not ok_h:
-            return False, err_h or "AI service unavailable.", None, m
-        try:
-            names = _ollama_tags_names(client, base)
-        except httpx.ConnectError:
-            return (
-                False,
-                "Cannot connect to the AI service. Start Ollama or fix OLLAMA_BASE_URL.",
-                None,
-                m,
-            )
-        except Exception:
-            return (
-                False,
-                "Could not read installed models from the AI service.",
-                None,
-                m,
-            )
-        if not model_installed_in_tags(names, m):
-            return (
-                False,
-                f'Model "{m}" is not installed. Install it on the Ollama host (e.g. ollama pull '
-                f'{m.split(":")[0]}), then try again.',
-                None,
-                m,
-            )
-        text = _post_generate_once(client, base, m, prompt)
-        if not (text or "").strip():
-            text = _post_chat_once(client, base, m, prompt)
-        if not (text or "").strip():
+    try:
+        with httpx.Client(timeout=OLLAMA_TIMEOUT) as client:
+            ok_h, err_h = ollama_health_reachable(client, base)
+            if not ok_h:
+                return False, err_h or "AI service unavailable.", None, m
+            try:
+                names = _ollama_tags_names(client, base)
+            except httpx.ConnectError:
+                return (
+                    False,
+                    "Cannot connect to the AI service. Start Ollama or fix OLLAMA_BASE_URL.",
+                    None,
+                    m,
+                )
+            except Exception:
+                return (
+                    False,
+                    "Could not read installed models from the AI service.",
+                    None,
+                    m,
+                )
+            if not model_installed_in_tags(names, m):
+                return (
+                    False,
+                    f'Model "{m}" is not installed. Install it on the Ollama host (e.g. ollama pull '
+                    f'{m.split(":")[0]}), then try again.',
+                    None,
+                    m,
+                )
             text = _post_generate_once(client, base, m, prompt)
-        if not (text or "").strip():
-            text = _post_chat_once(client, base, m, prompt)
-    p = (text or "").strip()
-    fb = (FALLBACK_FOLLOWUP_BODY or "").strip()
-    if not p or p == fb:
+            if not (text or "").strip():
+                text = _post_chat_once(client, base, m, prompt)
+            if not (text or "").strip():
+                text = _post_generate_once(client, base, m, prompt)
+            if not (text or "").strip():
+                text = _post_chat_once(client, base, m, prompt)
+    except httpx.TimeoutException:
         return (
             False,
-            "AI service temporarily unavailable. Please try again.",
+            "The AI service timed out. If the API runs in Docker, set OLLAMA_BASE_URL to reach "
+            "the host (e.g. http://host.docker.internal:11434 on Windows).",
             None,
             m,
         )
+    except httpx.RequestError as e:
+        return (
+            False,
+            f"Cannot reach Ollama at {base}: {e!s}. Check OLLAMA_BASE_URL and that the server "
+            "is reachable from the API process.",
+            None,
+            m,
+        )
+
+    p = (text or "").strip()
+    if not _ollama_admin_test_reply_ok(p):
+        hint = (
+            "Ollama returned no usable text for this prompt. If the API runs in Docker, "
+            "use a URL that reaches the host (e.g. http://host.docker.internal:11434), not "
+            "http://localhost:11434 inside the container."
+        )
+        if p:
+            return (
+                False,
+                f"{hint} Model said: {safe_client_detail(p, max_len=200)}",
+                None,
+                m,
+            )
+        return False, hint, None, m
     return (
         True,
         "Ollama is working. Model responded successfully.",

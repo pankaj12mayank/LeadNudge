@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from agents.ai_router import FALLBACK_FOLLOWUP_BODY
@@ -12,15 +13,68 @@ from agents.followup_agent import generate_followup
 from models.followup import Followup
 from models.lead import Lead
 from models.message import Message
+from models.user import User
 from models.workspace import Workspace
 from models.outbound_email import OutboundEmail
 from models.settings import WorkspaceSettings
-from schemas.followup import FollowupCreate, FollowupOut, FollowupUpdate
+from schemas.followup import FollowupCreate, FollowupUpdate
 from schemas.pagination import PaginationParams
 from services import email_service
 from utils.logger import get_logger
 
 log = get_logger("followup")
+
+
+def _normalize_scheduled_at_for_storage(dt: datetime) -> datetime:
+    """Store follow-ups on whole UTC seconds so duplicate detection matches the DB unique index."""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.replace(microsecond=0)
+
+
+_DUPLICATE_PENDING_MSG = (
+    "You already have a pending follow-up for this lead at that time. Pick a different time or "
+    "cancel the existing one first."
+)
+
+
+def dedupe_and_normalize_pending_followups(db: Session) -> None:
+    """
+    One-time maintenance: normalize pending scheduled_at to UTC seconds and remove duplicates
+    (same lead, same slot). Safe to run repeatedly.
+    """
+    pending = (
+        db.query(Followup)
+        .filter(Followup.status == "pending")
+        .order_by(Followup.id.asc())
+        .all()
+    )
+    if not pending:
+        return
+    buckets: dict[tuple[int, datetime], list[Followup]] = {}
+    for fu in pending:
+        n = _normalize_scheduled_at_for_storage(fu.scheduled_at)
+        key = (fu.lead_id, n)
+        buckets.setdefault(key, []).append(fu)
+    changed = False
+    for _key, group in buckets.items():
+        group.sort(key=lambda f: f.id)
+        keep = group[0]
+        nk = _normalize_scheduled_at_for_storage(keep.scheduled_at)
+        if keep.scheduled_at != nk:
+            keep.scheduled_at = nk
+            changed = True
+        for extra in group[1:]:
+            db.delete(extra)
+            changed = True
+    if changed:
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            log.exception("dedupe_and_normalize_pending_followups commit failed")
 
 
 def _emphasize_lead_last_message_in_body(body: str, last_message: str | None) -> str:
@@ -161,6 +215,27 @@ def followup_draft_content(db: Session, followup_id: int) -> str | None:
     return msg.content if msg else None
 
 
+def followup_draft_contents_bulk(
+    db: Session, followup_ids: list[int]
+) -> dict[int, str | None]:
+    """Latest draft message per follow-up in one query (avoids N+1 on list endpoints)."""
+    if not followup_ids:
+        return {}
+    rows = (
+        db.query(Message)
+        .filter(Message.followup_id.in_(followup_ids))
+        .order_by(Message.id.desc())
+        .all()
+    )
+    out: dict[int, str | None] = {}
+    for m in rows:
+        fid = m.followup_id
+        if fid is None or fid in out:
+            continue
+        out[fid] = m.content
+    return {fid: out.get(fid) for fid in followup_ids}
+
+
 def _prior_completed_followups(db: Session, lead_id: int, before_id: int) -> int:
     return int(
         db.query(func.count(Followup.id))
@@ -180,6 +255,7 @@ def create_followup(
     *,
     workspace_id: int | None,
     is_admin: bool,
+    user_id: int | None = None,
 ) -> tuple[Followup, Message | None]:
     """Queue a follow-up; AI runs when scheduled_at is due (background worker)."""
     lead = db.get(Lead, data.lead_id)
@@ -189,26 +265,53 @@ def create_followup(
         if workspace_id is None or lead.workspace_id != workspace_id:
             raise HTTPException(status_code=404, detail="Lead not found")
         from services import usage_alerts_service
-        from services.plan_access_service import ai_features_blocked, ai_block_user_message
+        from services.plan_access_service import validate_user_ai_scheduling
 
-        usage_alerts_service.sync_usage_threshold_emails(db, workspace_id)
-        if ai_features_blocked(db, workspace_id):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=ai_block_user_message(db, workspace_id),
-            )
+        if user_id is not None:
+            u = db.get(User, user_id)
+            if u is None or not u.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Your account has been deactivated.",
+                )
+            usage_alerts_service.sync_user_usage_threshold_emails(db, user_id)
+            validate_user_ai_scheduling(db, workspace_id, user_id)
+
+    at_norm = _normalize_scheduled_at_for_storage(data.scheduled_at)
+    clash = (
+        db.query(Followup.id)
+        .filter(
+            Followup.lead_id == data.lead_id,
+            Followup.status == "pending",
+            Followup.scheduled_at == at_norm,
+        )
+        .first()
+    )
+    if clash is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_DUPLICATE_PENDING_MSG,
+        )
 
     ft = getattr(data, "followup_type", "normal") or "normal"
     if ft not in ("normal", "recovery"):
         ft = "normal"
     fu = Followup(
         lead_id=data.lead_id,
-        scheduled_at=data.scheduled_at,
+        scheduled_at=at_norm,
         status="pending",
         followup_type=ft,
+        scheduled_by_user_id=user_id if not is_admin else None,
     )
     db.add(fu)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_DUPLICATE_PENDING_MSG,
+        ) from None
     db.refresh(fu)
     return fu, None
 
@@ -265,12 +368,17 @@ def _process_one_due_followup(db: Session, fu: Followup) -> None:
     workspace_plan = (ws_row.plan_type if ws_row else "free") or "free"
     settings = _get_settings(db, ws_id)
     from services import usage_alerts_service
-    from services.plan_access_service import ai_features_blocked, ai_block_user_message
+    from services.plan_access_service import ai_block_followup_processing
 
-    usage_alerts_service.sync_usage_threshold_emails(db, ws_id)
-    if ai_features_blocked(db, ws_id):
+    sid = getattr(fu, "scheduled_by_user_id", None)
+    if sid is not None:
+        usage_alerts_service.sync_user_usage_threshold_emails(db, sid)
+    else:
+        usage_alerts_service.sync_usage_threshold_emails(db, ws_id)
+    block_reason = ai_block_followup_processing(db, ws_id, sid)
+    if block_reason:
         fu.status = "ai_failed"
-        fu.failure_reason = ai_block_user_message(db, ws_id)
+        fu.failure_reason = block_reason
         db.commit()
         return
 
@@ -290,10 +398,6 @@ def _process_one_due_followup(db: Session, fu: Followup) -> None:
             message_kind = "followup_reminder"
         else:
             message_kind = "closing_attempt"
-    timing_key = FollowupOut.send_window_from_scheduled(fu.scheduled_at)
-    timing_label = {"morning": "Morning", "afternoon": "Afternoon", "evening": "Evening"}.get(
-        timing_key, timing_key
-    )
     try:
         om = (settings.ollama_model or "").strip() or None
         content = generate_followup(
@@ -310,7 +414,7 @@ def _process_one_due_followup(db: Session, fu: Followup) -> None:
             tone=tone,
             workspace_plan=workspace_plan,
             message_kind=message_kind,
-            send_timing_label=timing_label,
+            send_timing_label=None,
             lead_id=lead.id,
             followup_id=fu.id,
         )
@@ -363,6 +467,7 @@ def _process_one_due_followup(db: Session, fu: Followup) -> None:
         lead_id=lead.id,
         content=content,
         followup_id=fu.id,
+        created_by_user_id=sid,
     )
     db.add(msg)
     db.flush()
@@ -406,7 +511,10 @@ def _process_one_due_followup(db: Session, fu: Followup) -> None:
     )
     from services import usage_alerts_service
 
-    usage_alerts_service.sync_usage_threshold_emails(db, ws_id)
+    if sid is not None:
+        usage_alerts_service.sync_user_usage_threshold_emails(db, sid)
+    else:
+        usage_alerts_service.sync_usage_threshold_emails(db, ws_id)
 
 
 def patch_followup(
@@ -444,8 +552,31 @@ def patch_followup(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Only scheduled follow-ups can be rescheduled",
             )
-        fu.scheduled_at = data.scheduled_at
-        db.commit()
+        at_norm = _normalize_scheduled_at_for_storage(data.scheduled_at)
+        clash = (
+            db.query(Followup.id)
+            .filter(
+                Followup.lead_id == fu.lead_id,
+                Followup.status == "pending",
+                Followup.id != fu.id,
+                Followup.scheduled_at == at_norm,
+            )
+            .first()
+        )
+        if clash is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="You already have a pending follow-up for this lead at that time. Pick a different time or cancel the other one first.",
+            )
+        fu.scheduled_at = at_norm
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=_DUPLICATE_PENDING_MSG,
+            ) from None
         db.refresh(fu)
         return fu
 
@@ -507,10 +638,12 @@ def list_followups(
         .limit(limit)
         .all()
     )
+    ids = [fu.id for fu in fus]
+    draft_by_id = followup_draft_contents_bulk(db, ids)
     rows = [
         (
             fu,
-            followup_draft_content(db, fu.id),
+            draft_by_id.get(fu.id),
             fu.lead.name if fu.lead is not None else None,
         )
         for fu in fus

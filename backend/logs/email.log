@@ -221,3 +221,17 @@ smtplib.SMTPServerDisconnected: Connection unexpectedly closed: The read operati
 2026-04-12 12:08:40,048 INFO ais.email_file transactional_email sent host=smtp.gmail.com to=dante12mk@gmail.com
 2026-04-12 12:08:53,453 INFO ais.email_file transactional_email sent host=smtp.gmail.com to=dante12mk@gmail.com
 2026-04-12 12:28:55,608 INFO ais.email_file transactional_email sent host=smtp.gmail.com to=dante12mk@gmail.com
+2026-04-12 13:50:28,031 INFO ais.email_file followup_email sent host=smtp.gmail.com to=aarti48@gmail.com
+2026-04-12 14:05:20,611 INFO ais.email_file followup_email sent host=smtp.gmail.com to=aditya45@gmail.com
+2026-04-12 14:06:29,927 INFO ais.email_file followup_email sent host=smtp.gmail.com to=nitin47@gmail.com
+2026-04-12 14:07:09,618 INFO ais.email_file followup_email sent host=smtp.gmail.com to=bhavna50@gmail.com
+2026-04-12 14:08:21,313 INFO ais.email_file followup_email sent host=smtp.gmail.com to=bhavna50@gmail.com
+2026-04-12 14:09:31,488 INFO ais.email_file followup_email sent host=smtp.gmail.com to=bhavna50@gmail.com
+2026-04-12 14:09:42,034 INFO ais.email_file followup_email sent host=smtp.gmail.com to=bhavna50@gmail.com
+2026-04-12 14:10:22,472 INFO ais.email_file followup_email sent host=smtp.gmail.com to=bhavna50@gmail.com
+2026-04-12 14:10:31,747 INFO ais.email_file transactional_email sent host=smtp.gmail.com to=dante12mk@gmail.com
+2026-04-12 14:14:06,201 INFO ais.email_file followup_email sent host=smtp.gmail.com to=bhavna50@gmail.com
+2026-04-12 14:24:16,162 INFO ais.email_file followup_email sent host=smtp.gmail.com to=bhavna50@gmail.com
+2026-04-12 14:25:25,961 INFO ais.email_file followup_email sent host=smtp.gmail.com to=lokesh49@gmail.com
+2026-04-12 14:31:33,262 INFO ais.email_file followup_email sent host=smtp.gmail.com to=bhavna50@gmail.com
+2026-04-12 14:48:01,434 INFO ais.email_file transactional_email sent host=smtp.gmail.com to=Saumyasakwar9780@gmail.com

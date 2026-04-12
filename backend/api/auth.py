@@ -11,7 +11,13 @@ from models.workspace import Workspace
 from services import admin_account_service, auth_service
 from services import password_request_service
 from services import user_profile_service
-from services.plan_access_service import workspace_plan_expired
+from services.plan_expiry_notify_service import maybe_send_plan_expired_emails
+from services.plan_access_service import (
+    portal_shows_plan_expired_notice,
+    user_ai_quota_exhausted,
+    user_effective_ai_limit,
+)
+from services.settings_service import count_user_ai_messages
 from utils.logger import get_logger
 
 log = get_logger("auth")
@@ -60,13 +66,20 @@ def auth_me(
         )
     u = user_profile_service.get_user(db, principal.user_id)
     auth_service.assert_user_portal_access(db, u)
+    maybe_send_plan_expired_emails(db, u.workspace_id)
     ws = db.get(Workspace, u.workspace_id)
     wpt = (ws.plan_type or "free").lower() if ws else "free"
+    wid = u.workspace_id
+    used = count_user_ai_messages(db, u.id)
+    lim = user_effective_ai_limit(db, u.id)
     return MeOut(
         role="user",
         email=u.email,
         display_name=u.display_name,
         phone=u.phone,
-        workspace_plan_expired=workspace_plan_expired(db, u.workspace_id),
+        workspace_plan_expired=portal_shows_plan_expired_notice(db, wid, u.id),
         workspace_plan_type=wpt,
+        workspace_ai_messages_used=used,
+        workspace_ai_limit=lim,
+        workspace_ai_quota_exhausted=user_ai_quota_exhausted(db, u.id),
     )
