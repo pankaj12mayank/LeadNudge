@@ -20,9 +20,10 @@ from services import lead_service
 router = APIRouter(prefix="/leads", tags=["leads"])
 
 CSV_SAMPLE = (
-    "name,email,phone,country_code,last_message\n"
-    "Acme Corp,contact@acme.com,+15551234567,US,"
-    "\"Thanks for the demo — follow up next week\"\n"
+    "name,email,phone,country_code,company,status,notes\n"
+    "John Doe,john@example.com,9876543210,+91,ABC Pvt Ltd,New,Interested in demo\n"
+    "Sarah Smith,sarah@gmail.com,5551234567,+1,XYZ Inc,Contacted,Follow-up next week\n"
+    "Ali Khan,ali@yahoo.com,501234567,+971,Tech LLC,New,Requested pricing\n"
 )
 
 
@@ -84,6 +85,7 @@ def list_leads(
     db: Annotated[Session, Depends(get_db)],
     workspace_id: int | None = Query(default=None),
     q: str | None = Query(default=None, max_length=200),
+    status: str | None = Query(default=None, max_length=64),
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=50, ge=1, le=500),
 ) -> PaginatedLeads:
@@ -100,6 +102,7 @@ def list_leads(
         page=page,
         limit=limit,
         search=q,
+        status=status,
     )
     return PaginatedLeads.from_page(
         [LeadOut.model_validate(x) for x in rows],

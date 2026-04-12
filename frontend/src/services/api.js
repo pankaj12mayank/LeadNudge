@@ -39,16 +39,29 @@ api.interceptors.response.use(
       const d = err.response?.data?.detail;
       const msg = typeof d === "string" ? d : "";
       const lower = msg.toLowerCase();
+      // Quota / AI limits must not clear the session — only block specific actions server-side.
       if (
+        lower.includes("quota exhausted") ||
+        lower.includes("ai message quota") ||
+        (lower.includes("quota") && lower.includes("exhausted")) ||
+        lower.includes("workspace plan has expired") ||
+        lower.includes("ai follow-ups and message generation are disabled")
+      ) {
+        const error = new Error(msg);
+        error.status = status;
+        error.original = err;
+        return Promise.reject(error);
+      }
+      if (
+        lower.includes("blocked your account") ||
         lower.includes("deactivated") ||
-        lower.includes("plan has expired") ||
         lower.includes("account is inactive")
       ) {
         clearSession();
         if (!window.location.pathname.startsWith("/login")) {
           toast.error(
-            msg.includes("plan")
-              ? "Your plan has expired. Contact your administrator."
+            lower.includes("blocked your account")
+              ? msg
               : "Your account has been deactivated.",
           );
           window.location.replace("/login");

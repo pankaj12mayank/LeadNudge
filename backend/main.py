@@ -12,6 +12,7 @@ from api import (
     account,
     admin,
     auth,
+    dashboard,
     followups,
     leads,
     outbound_mails,
@@ -45,6 +46,35 @@ async def _followup_scheduler_loop() -> None:
         await asyncio.sleep(30)
 
 
+async def _daily_sales_maintenance_loop() -> None:
+    """Once per UTC day: refresh lead temperature tags and queue missed-lead recovery."""
+    from datetime import date, datetime, timezone
+
+    from services import lead_service, recovery_service
+
+    await asyncio.sleep(60)
+    last_run: date | None = None
+    while True:
+        today = datetime.now(timezone.utc).date()
+        if last_run != today:
+            db = SessionLocal()
+            try:
+                n_tag = lead_service.recompute_all_temperature_tags(db)
+                n_rec = recovery_service.run_daily_recovery(db)
+                last_run = today
+                if n_tag or n_rec:
+                    log.info(
+                        "Daily maintenance: temperature updates=%s recovery queued=%s",
+                        n_tag,
+                        n_rec,
+                    )
+            except Exception:
+                log.exception("Daily sales maintenance failed")
+            finally:
+                db.close()
+        await asyncio.sleep(3600)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
@@ -60,13 +90,16 @@ async def lifespan(_: FastAPI):
             log.info("Bootstrap admin created: %s", email)
     finally:
         db.close()
-    task = asyncio.create_task(_followup_scheduler_loop())
+    task_followups = asyncio.create_task(_followup_scheduler_loop())
+    task_daily = asyncio.create_task(_daily_sales_maintenance_loop())
     yield
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
+    task_followups.cancel()
+    task_daily.cancel()
+    for t in (task_followups, task_daily):
+        try:
+            await t
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(title="AI Sales Follow-up Agent", lifespan=lifespan)
@@ -89,6 +122,7 @@ app.include_router(auth.router)
 app.include_router(account.router)
 app.include_router(admin.router)
 app.include_router(leads.router)
+app.include_router(dashboard.router)
 app.include_router(followups.router)
 app.include_router(outbound_mails.router)
 app.include_router(settings_router.router)

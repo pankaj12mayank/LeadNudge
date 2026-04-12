@@ -24,6 +24,11 @@ def _workspace_ai_message_count(db: Session, workspace_id: int) -> int:
     return int(db.execute(stmt).scalar_one())
 
 
+def count_workspace_ai_messages(db: Session, workspace_id: int) -> int:
+    """Messages tied to leads in this workspace (same basis as the AI usage quota)."""
+    return _workspace_ai_message_count(db, workspace_id)
+
+
 def _workspace_outbound_count(db: Session, workspace_id: int) -> int:
     stmt = (
         select(func.count())
@@ -68,6 +73,18 @@ def get_settings_out(
     outbound_n = _workspace_outbound_count(db, workspace_id)
     pct = (100.0 * used / lim) if lim > 0 else 0.0
     near = lim > 0 and used >= int(lim * 0.9 + 0.9999) and used < lim
+    exhausted = lim > 0 and used >= lim
+
+    from services import usage_alerts_service
+    from services.plan_access_service import workspace_plan_expired
+    from services.plan_expiry_notify_service import maybe_send_plan_expired_emails
+
+    maybe_send_plan_expired_emails(db, workspace_id)
+    usage_alerts_service.sync_usage_threshold_emails(db, workspace_id)
+
+    ws_row = db.get(Workspace, workspace_id)
+    plan_exp = workspace_plan_expired(db, workspace_id)
+    features_blocked = plan_exp or exhausted
 
     return SettingsOut(
         workspace_id=row.workspace_id,
@@ -87,7 +104,13 @@ def get_settings_out(
         outbound_emails_sent=outbound_n,
         usage_percent=round(pct, 2),
         usage_near_limit=near,
+        ai_quota_exhausted=exhausted,
+        plan_expired=plan_exp,
+        ai_features_blocked=features_blocked,
+        plan_expires_at=ws_row.plan_expires_at if ws_row else None,
         smtp_fully_configured=_smtp_configured(row),
+        dashboard_manual_replies=int(row.dashboard_manual_replies or 0),
+        dashboard_manual_conversions=int(row.dashboard_manual_conversions or 0),
     )
 
 
@@ -116,7 +139,10 @@ def update_user_settings(
             )
         row.ai_mode = data.ai_mode
     if data.usage_limit is not None:
-        row.usage_limit = data.usage_limit
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only an administrator can change the workspace AI message limit.",
+        )
 
     smtp_request = any(
         x is not None
@@ -154,6 +180,11 @@ def update_user_settings(
     if data.followup_sender_display_name is not None:
         s = (data.followup_sender_display_name or "").strip()
         row.followup_sender_display_name = s or None
+
+    if data.dashboard_manual_replies is not None:
+        row.dashboard_manual_replies = int(data.dashboard_manual_replies)
+    if data.dashboard_manual_conversions is not None:
+        row.dashboard_manual_conversions = int(data.dashboard_manual_conversions)
 
     if ws_plan and (ws_plan.plan_type or "free").lower() != "pro":
         row.ai_mode = "local"

@@ -1,139 +1,235 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import Card from "../../components/Card";
 import Table from "../../components/Table";
 import Badge from "../../components/Badge";
-import PaginationBar from "../../components/PaginationBar";
 import { useSite } from "../../context/SiteContext";
 import * as userService from "../../services/userService";
+import {
+  SESSION_PLAN_EXPIRED_TOAST_KEY,
+  SESSION_QUOTA_TOAST_KEY,
+} from "../../utils/constants";
+import { formatScheduleDisplay } from "../../utils/formatSchedule";
 
-const leadColumns = [
-  {
-    key: "name",
-    label: "Name",
-    render: (r) => (
-      <span className="font-medium text-neutral-900 dark:text-neutral-100">{r.name}</span>
-    ),
-  },
-  {
-    key: "email",
-    label: "Email",
-    render: (r) => (
-      <span className="text-neutral-600 dark:text-neutral-400">{r.email}</span>
-    ),
-  },
-  {
-    key: "status",
-    label: "Status",
-    render: (r) => <Badge variant="muted">{r.status}</Badge>,
-  },
+const STATUS_OPTIONS = [
+  { value: "", label: "All statuses" },
+  { value: "new", label: "New" },
+  { value: "contacted", label: "Contacted" },
+  { value: "interested", label: "Interested" },
+  { value: "not_interested", label: "Not interested" },
+  { value: "closed", label: "Closed" },
 ];
+
+function temperatureVariant(tag) {
+  const k = (tag || "").toLowerCase();
+  if (k === "hot") return "hot";
+  if (k === "warm") return "warm";
+  if (k === "cold") return "cold";
+  return "muted";
+}
 
 export default function Dashboard() {
   const { site } = useSite();
   const supportEmail = site?.support_email;
-  const [leads, setLeads] = useState(0);
-  const [followups, setFollowups] = useState(0);
-  const [outboundSent, setOutboundSent] = useState(0);
+
   const [usageUsed, setUsageUsed] = useState(0);
   const [usageLimit, setUsageLimit] = useState(0);
   const [usageNear, setUsageNear] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [outboundSent, setOutboundSent] = useState(0);
+  const [usageLoading, setUsageLoading] = useState(true);
 
-  const [dashPage, setDashPage] = useState(1);
-  const dashLimit = 8;
-  const [dashRows, setDashRows] = useState([]);
-  const [dashTotal, setDashTotal] = useState(0);
-  const [dashPages, setDashPages] = useState(1);
-  const [dashQInput, setDashQInput] = useState("");
-  const [dashQ, setDashQ] = useState("");
-  const [dashLoading, setDashLoading] = useState(false);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [summary, setSummary] = useState(null);
+  const [dashLoading, setDashLoading] = useState(true);
 
-  useEffect(() => {
-    let c = false;
-    (async () => {
-      try {
-        const [l, f, s] = await Promise.all([
-          userService.listLeads(undefined, { page: 1, limit: 1 }),
-          userService.listFollowups(undefined, { page: 1, limit: 1 }),
-          userService.getSettings(),
-        ]);
-        if (!c) {
-          setLeads(l.total ?? 0);
-          setFollowups(f.total ?? 0);
-          setOutboundSent(s.outbound_emails_sent ?? 0);
-          setUsageUsed(s.ai_messages_used ?? 0);
-          setUsageLimit(s.usage_limit ?? 0);
-          setUsageNear(Boolean(s.usage_near_limit));
-        }
-      } catch (e) {
-        if (!c) toast.error(e.message);
-      } finally {
-        if (!c) setLoading(false);
+  const [manualReplies, setManualReplies] = useState(0);
+  const [manualConversions, setManualConversions] = useState(0);
+  const [manualSaving, setManualSaving] = useState(false);
+
+  const loadUsage = useCallback(async () => {
+    try {
+      const s = await userService.getSettings();
+      setOutboundSent(s.outbound_emails_sent ?? 0);
+      setUsageUsed(s.ai_messages_used ?? 0);
+      setUsageLimit(s.usage_limit ?? 0);
+      setUsageNear(Boolean(s.usage_near_limit));
+      if (
+        s.plan_expired &&
+        !sessionStorage.getItem(SESSION_PLAN_EXPIRED_TOAST_KEY)
+      ) {
+        sessionStorage.setItem(SESSION_PLAN_EXPIRED_TOAST_KEY, "1");
+        toast.error("Your plan has expired. Contact admin to upgrade.", {
+          duration: 10_000,
+        });
+      } else if (
+        s.ai_quota_exhausted &&
+        !sessionStorage.getItem(SESSION_QUOTA_TOAST_KEY)
+      ) {
+        sessionStorage.setItem(SESSION_QUOTA_TOAST_KEY, "1");
+        toast.error("AI message limit khatam ho chuka hai", {
+          description:
+            "Is period ke liye aapka AI message limit poora use ho gaya hai. Apne administrator se contact karke limit ya plan update karwayein.",
+          duration: 14_000,
+        });
       }
-    })();
-    return () => {
-      c = true;
-    };
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setUsageLoading(false);
+    }
   }, []);
 
+  const loadDashboard = useCallback(async () => {
+    setDashLoading(true);
+    try {
+      const data = await userService.getSalesDashboardSummary({
+        date_from: dateFrom || undefined,
+        date_to: dateTo || undefined,
+        status: statusFilter || undefined,
+      });
+      setSummary(data);
+      setManualReplies(data.manual_replies ?? 0);
+      setManualConversions(data.manual_conversions ?? 0);
+    } catch (e) {
+      toast.error(e.message);
+      setSummary(null);
+    } finally {
+      setDashLoading(false);
+    }
+  }, [dateFrom, dateTo, statusFilter]);
+
   useEffect(() => {
-    const id = setInterval(async () => {
-      try {
-        const s = await userService.getSettings();
-        setOutboundSent(s.outbound_emails_sent ?? 0);
-        setUsageUsed(s.ai_messages_used ?? 0);
-        setUsageLimit(s.usage_limit ?? 0);
-        setUsageNear(Boolean(s.usage_near_limit));
-      } catch {
-        /* ignore */
-      }
+    loadUsage();
+  }, [loadUsage]);
+
+  useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      loadUsage();
     }, 35000);
     return () => clearInterval(id);
-  }, []);
+  }, [loadUsage]);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setDashLoading(true);
-      try {
-        const data = await userService.listLeads(undefined, {
-          page: dashPage,
-          limit: dashLimit,
-          q: dashQ || undefined,
-        });
-        if (!cancelled) {
-          setDashRows(data.items ?? []);
-          setDashTotal(data.total ?? 0);
-          setDashPages(data.pages ?? 1);
-        }
-      } catch (e) {
-        if (!cancelled) toast.error(e.message);
-      } finally {
-        if (!cancelled) setDashLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [dashPage, dashLimit, dashQ]);
+  async function onSaveManualStats(e) {
+    e.preventDefault();
+    setManualSaving(true);
+    try {
+      await userService.updateSettings({
+        dashboard_manual_replies: Math.max(0, Number(manualReplies) || 0),
+        dashboard_manual_conversions: Math.max(0, Number(manualConversions) || 0),
+      });
+      toast.success("Dashboard counters saved");
+      await loadDashboard();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setManualSaving(false);
+    }
+  }
+
+  const leadColumns = [
+    {
+      key: "name",
+      label: "Name",
+      render: (r) => (
+        <span className="font-medium text-neutral-900 dark:text-neutral-100">{r.name}</span>
+      ),
+    },
+    {
+      key: "email",
+      label: "Email",
+      render: (r) => (
+        <span className="text-neutral-600 dark:text-neutral-400">{r.email}</span>
+      ),
+    },
+    {
+      key: "temperature_tag",
+      label: "Tag",
+      render: (r) => {
+        const t = (r.temperature_tag || "").toLowerCase();
+        if (!t) return <span className="text-neutral-400">—</span>;
+        return (
+          <Badge variant={temperatureVariant(r.temperature_tag)}>
+            {t === "hot" ? "HOT" : t === "warm" ? "WARM" : t === "cold" ? "COLD" : t}
+          </Badge>
+        );
+      },
+    },
+    {
+      key: "status",
+      label: "Status",
+      render: (r) => <Badge variant="muted">{r.status}</Badge>,
+    },
+    {
+      key: "created_at",
+      label: "Added",
+      render: (r) =>
+        r.created_at ? formatScheduleDisplay(r.created_at) : "—",
+    },
+  ];
+
+  const followupColumns = [
+    {
+      key: "lead_name",
+      label: "Lead",
+      render: (r) => (
+        <span className="font-medium text-neutral-900 dark:text-neutral-100">
+          {r.lead_name || `ID ${r.lead_id}`}
+        </span>
+      ),
+    },
+    {
+      key: "followup_type",
+      label: "Type",
+      render: (r) => {
+        const isRec = (r.followup_type || "normal") === "recovery";
+        return (
+          <Badge variant={isRec ? "outline" : "muted"}>
+            {isRec ? "Recovery" : "Normal"}
+          </Badge>
+        );
+      },
+    },
+    {
+      key: "scheduled_at",
+      label: "Scheduled",
+      render: (r) => formatScheduleDisplay(r.scheduled_at),
+    },
+    {
+      key: "status",
+      label: "Status",
+      render: (r) => <Badge variant="muted">{r.status}</Badge>,
+    },
+    {
+      key: "sent_at",
+      label: "Sent",
+      render: (r) =>
+        r.sent_at ? formatScheduleDisplay(r.sent_at) : "—",
+    },
+  ];
 
   return (
     <div className="w-full space-y-8 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
       <section className="w-full border-b border-neutral-200 pb-6 dark:border-neutral-800">
         <p className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-          Today
+          Sales
         </p>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
-          Workspace snapshot
+          Dashboard
         </h1>
         <p className="mt-2 w-full text-sm text-neutral-600 dark:text-neutral-400">
-          Totals reflect your workspace only. Follow-ups run at the time you schedule; with SMTP
-          configured the app can email the lead and log the send here. AI drafts count toward your
-          plan limit.
+          Filter by lead creation date and status. Follow-ups sent counts messages marked sent in the
+          selected window. Replies and conversions are manual counts you maintain below until inbox
+          sync exists.
         </p>
       </section>
+
       {usageNear && usageLimit > 0 ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
           <p className="font-medium">You are reaching your limit. Upgrade plan.</p>
@@ -154,30 +250,171 @@ export default function Dashboard() {
           </p>
         </div>
       ) : null}
-      {loading ? (
-        <p className="text-neutral-500 dark:text-neutral-400">Loading…</p>
+
+      <Card title="Plan &amp; usage activity">
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          Open your full activity log to search, review every plan or limit change, and remove old
+          entries from your personal list.
+        </p>
+        <Link
+          to="/usage-activity"
+          className="mt-3 inline-flex text-sm font-semibold text-blue-700 underline decoration-blue-300 underline-offset-2 dark:text-blue-400"
+        >
+          Open activity log →
+        </Link>
+      </Card>
+
+      <Card title="Filters">
+        <div className="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-end">
+          <div>
+            <label className="form-label" htmlFor="dash-from">
+              From (lead created)
+            </label>
+            <input
+              id="dash-from"
+              type="date"
+              className="form-input w-full min-w-[11rem]"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="form-label" htmlFor="dash-to">
+              To (lead created)
+            </label>
+            <input
+              id="dash-to"
+              type="date"
+              className="form-input w-full min-w-[11rem]"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+            />
+          </div>
+          <div className="min-w-[12rem]">
+            <label className="form-label" htmlFor="dash-status">
+              Status
+            </label>
+            <select
+              id="dash-status"
+              className="form-select w-full"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              {STATUS_OPTIONS.map((o) => (
+                <option key={o.value || "all"} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="btn-primary" onClick={() => loadDashboard()}>
+              Refresh
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => {
+                setDateFrom("");
+                setDateTo("");
+                setStatusFilter("");
+              }}
+            >
+              Clear filters
+            </button>
+          </div>
+        </div>
+      </Card>
+
+      {dashLoading && !summary ? (
+        <p className="text-neutral-500 dark:text-neutral-400">Loading dashboard…</p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card noBodyPadding>
             <div className="p-6">
               <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
-                Leads
+                Total leads
               </p>
               <p className="mt-2 text-3xl font-semibold tabular-nums text-neutral-900 dark:text-neutral-100">
-                {leads}
+                {summary?.total_leads ?? 0}
               </p>
             </div>
           </Card>
           <Card noBodyPadding>
             <div className="p-6">
               <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
-                Follow-ups
+                Follow-ups sent
               </p>
               <p className="mt-2 text-3xl font-semibold tabular-nums text-neutral-900 dark:text-neutral-100">
-                {followups}
+                {summary?.followups_sent ?? 0}
               </p>
             </div>
           </Card>
+          <Card noBodyPadding>
+            <div className="p-6">
+              <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
+                Replies (manual)
+              </p>
+              <p className="mt-2 text-3xl font-semibold tabular-nums text-neutral-900 dark:text-neutral-100">
+                {summary?.manual_replies ?? 0}
+              </p>
+            </div>
+          </Card>
+          <Card noBodyPadding>
+            <div className="p-6">
+              <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
+                Conversions (manual)
+              </p>
+              <p className="mt-2 text-3xl font-semibold tabular-nums text-neutral-900 dark:text-neutral-100">
+                {summary?.manual_conversions ?? 0}
+              </p>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      <Card title="Manual replies & conversions">
+        <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
+          Enter totals you track outside the app (for example from your inbox). These feed the
+          dashboard cards above.
+        </p>
+        <form onSubmit={onSaveManualStats} className="flex flex-col gap-4 sm:flex-row sm:items-end">
+          <div className="flex-1">
+            <label className="form-label" htmlFor="manual-replies">
+              Replies count
+            </label>
+            <input
+              id="manual-replies"
+              type="number"
+              min={0}
+              className="form-input w-full"
+              value={manualReplies}
+              onChange={(e) => setManualReplies(e.target.value)}
+              disabled={manualSaving}
+            />
+          </div>
+          <div className="flex-1">
+            <label className="form-label" htmlFor="manual-conv">
+              Conversions count
+            </label>
+            <input
+              id="manual-conv"
+              type="number"
+              min={0}
+              className="form-input w-full"
+              value={manualConversions}
+              onChange={(e) => setManualConversions(e.target.value)}
+              disabled={manualSaving}
+            />
+          </div>
+          <button type="submit" className="btn-primary shrink-0" disabled={manualSaving}>
+            {manualSaving ? "Saving…" : "Save counts"}
+          </button>
+        </form>
+      </Card>
+
+      {!usageLoading ? (
+        <div className="grid gap-4 sm:grid-cols-2">
           <Card noBodyPadding>
             <div className="p-6">
               <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
@@ -205,7 +442,7 @@ export default function Dashboard() {
             </div>
           </Card>
         </div>
-      )}
+      ) : null}
 
       <Card
         title="Recent leads"
@@ -215,63 +452,37 @@ export default function Dashboard() {
           </Link>
         }
       >
-        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end">
-          <div className="min-w-0 flex-1">
-            <label className="form-label">Search</label>
-            <input
-              className="form-input w-full"
-              placeholder="Name or email"
-              value={dashQInput}
-              onChange={(e) => setDashQInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  setDashPage(1);
-                  setDashQ(dashQInput.trim());
-                }
-              }}
-            />
-          </div>
-          <div className="flex w-full gap-2 sm:w-auto">
-            <button
-              type="button"
-              className="btn-primary w-full sm:w-auto"
-              onClick={() => {
-                setDashPage(1);
-                setDashQ(dashQInput.trim());
-              }}
-            >
-              Search
-            </button>
-            <button
-              type="button"
-              className="btn-secondary w-full sm:w-auto"
-              onClick={() => {
-                setDashQInput("");
-                setDashQ("");
-                setDashPage(1);
-              }}
-            >
-              Clear
-            </button>
-          </div>
-        </div>
         {dashLoading ? (
-          <p className="text-neutral-500 dark:text-neutral-400">Loading leads…</p>
+          <p className="text-neutral-500 dark:text-neutral-400">Loading…</p>
         ) : (
-          <>
-            <div className="overflow-x-auto">
-              <Table columns={leadColumns} rows={dashRows} emptyText="No leads match." />
-            </div>
-            <PaginationBar
-              page={dashPage}
-              pages={dashPages}
-              total={dashTotal}
-              limit={dashLimit}
-              disabled={dashLoading}
-              onPageChange={(p) => setDashPage(p)}
+          <div className="overflow-x-auto">
+            <Table
+              columns={leadColumns}
+              rows={summary?.recent_leads ?? []}
+              emptyText="No leads in this view."
             />
-          </>
+          </div>
+        )}
+      </Card>
+
+      <Card
+        title="Recent follow-ups"
+        actions={
+          <Link to="/followups" className="text-sm font-medium text-neutral-700 underline dark:text-neutral-300">
+            View all
+          </Link>
+        }
+      >
+        {dashLoading ? (
+          <p className="text-neutral-500 dark:text-neutral-400">Loading…</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table
+              columns={followupColumns}
+              rows={summary?.recent_followups ?? []}
+              emptyText="No follow-ups in this view."
+            />
+          </div>
         )}
       </Card>
     </div>

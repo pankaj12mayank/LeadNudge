@@ -234,6 +234,7 @@ def init_db() -> None:
     from models import system_log  # noqa: F401
     from models import settings as settings_model  # noqa: F401
     from models import user  # noqa: F401
+    from models import user_usage_history  # noqa: F401
     from models import workspace  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
@@ -277,6 +278,18 @@ def init_db() -> None:
         "plan_expires_at",
         sqlite_ddl="ALTER TABLE workspaces ADD COLUMN plan_expires_at TIMESTAMP",
         postgres_ddl="ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS plan_expires_at TIMESTAMPTZ",
+    )
+    _ensure_column_if_missing(
+        "workspaces",
+        "plan_expired_email_sent",
+        sqlite_ddl=(
+            "ALTER TABLE workspaces ADD COLUMN plan_expired_email_sent "
+            "INTEGER DEFAULT 0 NOT NULL"
+        ),
+        postgres_ddl=(
+            "ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS plan_expired_email_sent "
+            "BOOLEAN NOT NULL DEFAULT false"
+        ),
     )
     _ensure_column_if_missing(
         "users",
@@ -345,6 +358,112 @@ def init_db() -> None:
     _sqlite_migrate_message_followup_id()
     _sqlite_migrate_followup_sent_at()
     _sqlite_migrate_branding_extras()
+    _ensure_column_if_missing(
+        "leads",
+        "company",
+        sqlite_ddl="ALTER TABLE leads ADD COLUMN company VARCHAR(255)",
+        postgres_ddl="ALTER TABLE leads ADD COLUMN IF NOT EXISTS company VARCHAR(255)",
+    )
+    _ensure_column_if_missing(
+        "leads",
+        "temperature_tag",
+        sqlite_ddl="ALTER TABLE leads ADD COLUMN temperature_tag VARCHAR(16)",
+        postgres_ddl="ALTER TABLE leads ADD COLUMN IF NOT EXISTS temperature_tag VARCHAR(16)",
+    )
+    _ensure_column_if_missing(
+        "leads",
+        "created_at",
+        sqlite_ddl="ALTER TABLE leads ADD COLUMN created_at TIMESTAMP",
+        postgres_ddl=(
+            "ALTER TABLE leads ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ"
+        ),
+    )
+    _ensure_column_if_missing(
+        "followups",
+        "followup_type",
+        sqlite_ddl="ALTER TABLE followups ADD COLUMN followup_type VARCHAR(16) DEFAULT 'normal' NOT NULL",
+        postgres_ddl=(
+            "ALTER TABLE followups ADD COLUMN IF NOT EXISTS followup_type VARCHAR(16) "
+            "DEFAULT 'normal' NOT NULL"
+        ),
+    )
+    _ensure_column_if_missing(
+        "settings",
+        "dashboard_manual_replies",
+        sqlite_ddl=(
+            "ALTER TABLE settings ADD COLUMN dashboard_manual_replies INTEGER DEFAULT 0 NOT NULL"
+        ),
+        postgres_ddl=(
+            "ALTER TABLE settings ADD COLUMN IF NOT EXISTS dashboard_manual_replies "
+            "INTEGER NOT NULL DEFAULT 0"
+        ),
+    )
+    _ensure_column_if_missing(
+        "settings",
+        "dashboard_manual_conversions",
+        sqlite_ddl=(
+            "ALTER TABLE settings ADD COLUMN dashboard_manual_conversions INTEGER DEFAULT 0 NOT NULL"
+        ),
+        postgres_ddl=(
+            "ALTER TABLE settings ADD COLUMN IF NOT EXISTS dashboard_manual_conversions "
+            "INTEGER NOT NULL DEFAULT 0"
+        ),
+    )
+    _ensure_column_if_missing(
+        "settings",
+        "usage_email_90_sent",
+        sqlite_ddl=(
+            "ALTER TABLE settings ADD COLUMN usage_email_90_sent INTEGER DEFAULT 0 NOT NULL"
+        ),
+        postgres_ddl=(
+            "ALTER TABLE settings ADD COLUMN IF NOT EXISTS usage_email_90_sent "
+            "BOOLEAN NOT NULL DEFAULT false"
+        ),
+    )
+    _ensure_column_if_missing(
+        "settings",
+        "usage_email_limit_sent",
+        sqlite_ddl=(
+            "ALTER TABLE settings ADD COLUMN usage_email_limit_sent INTEGER DEFAULT 0 NOT NULL"
+        ),
+        postgres_ddl=(
+            "ALTER TABLE settings ADD COLUMN IF NOT EXISTS usage_email_limit_sent "
+            "BOOLEAN NOT NULL DEFAULT false"
+        ),
+    )
+    if settings.database_url.startswith("sqlite"):
+        with engine.begin() as conn:
+            try:
+                conn.execute(
+                    text(
+                        "UPDATE leads SET created_at = CURRENT_TIMESTAMP "
+                        "WHERE created_at IS NULL"
+                    )
+                )
+            except Exception:
+                pass
+    else:
+        with engine.begin() as conn:
+            try:
+                conn.execute(
+                    text(
+                        "UPDATE leads SET created_at = NOW() AT TIME ZONE 'utc' "
+                        "WHERE created_at IS NULL"
+                    )
+                )
+            except Exception:
+                pass
+
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE followups SET followup_type = 'normal' "
+                    "WHERE followup_type IS NULL OR TRIM(followup_type) = ''"
+                )
+            )
+    except Exception:
+        pass
 
     from services import admin_service
     from services.template_mail_service import ensure_default_templates

@@ -19,6 +19,7 @@ export default function EmailTemplateEdit() {
   const [body, setBody] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [initialSubj, setInitialSubj] = useState("");
   const [initialBody, setInitialBody] = useState("");
 
@@ -72,6 +73,26 @@ export default function EmailTemplateEdit() {
     }
   }
 
+  async function onDelete() {
+    if (
+      !confirm(
+        "Delete this template? Emails for this trigger will fail until you create a new template.",
+      )
+    ) {
+      return;
+    }
+    setDeleting(true);
+    try {
+      await adminService.deleteEmailTemplate(name);
+      toast.success("Template deleted");
+      navigate("/admin/email-templates", { replace: true });
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="w-full max-w-4xl space-y-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
       <div className="flex flex-wrap items-center gap-3">
@@ -122,13 +143,23 @@ export default function EmailTemplateEdit() {
                 spellCheck={false}
               />
             </div>
-            <button
-              type="submit"
-              className="btn-primary"
-              disabled={saving || !dirty}
-            >
-              {saving ? "Saving…" : "Save template"}
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="submit"
+                className="btn-primary"
+                disabled={saving || deleting || !dirty}
+              >
+                {saving ? "Saving…" : "Save template"}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary border-red-200 text-red-800 hover:bg-red-50 dark:border-red-900 dark:text-red-200 dark:hover:bg-red-950/40"
+                disabled={saving || deleting}
+                onClick={onDelete}
+              >
+                {deleting ? "Deleting…" : "Delete template"}
+              </button>
+            </div>
           </form>
         )}
       </Card>

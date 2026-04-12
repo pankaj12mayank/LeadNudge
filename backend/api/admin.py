@@ -1,5 +1,6 @@
 import shutil
 import subprocess
+from datetime import date, datetime, timezone
 from math import ceil
 from typing import Annotated
 
@@ -22,7 +23,12 @@ from schemas.admin_profile import (
     BrandingUpdate,
     MailTestRequest,
 )
-from schemas.email_template import EmailTemplateOut, EmailTemplateUpdate
+from schemas.email_template import (
+    EmailTemplateCreate,
+    EmailTemplateOut,
+    EmailTemplateUpdate,
+    EmailTriggerOut,
+)
 from schemas.pagination import PaginationParams
 from schemas.password_request import (
     PaginatedPasswordRequests,
@@ -49,6 +55,11 @@ from schemas.system_admin import (
     SystemLogsDeleteRequest,
     SystemStatusOut,
 )
+from schemas.usage_history import (
+    PaginatedUsageHistory,
+    UsageHistoryDeleteRequest,
+    UsageHistoryUserOut,
+)
 from schemas.user import (
     AdminUserPasswordSet,
     PaginatedUsers,
@@ -58,6 +69,7 @@ from schemas.user import (
 )
 from schemas.workspace import WorkspaceOut, WorkspacePlanUpdate
 from services import admin_service, admin_account_service, branding_service
+from services import usage_history_service
 from services import password_request_service, template_mail_service
 from services.settings_service import get_settings_out
 from services import system_log_service
@@ -590,10 +602,12 @@ def list_workspaces(
 def update_workspace_plan(
     workspace_id: int,
     body: WorkspacePlanUpdate,
-    _: Annotated[Principal, Depends(require_admin)],
+    principal: Annotated[Principal, Depends(require_admin)],
     db: Annotated[Session, Depends(get_db)],
 ) -> WorkspaceOut:
-    ws = admin_service.update_workspace_plan(db, workspace_id, body)
+    ws = admin_service.update_workspace_plan(
+        db, workspace_id, body, changed_by=principal.admin_id
+    )
     return WorkspaceOut.model_validate(ws)
 
 
@@ -606,13 +620,67 @@ def admin_list_email_templates(
     return [EmailTemplateOut.model_validate(r) for r in rows]
 
 
+@router.get(
+    "/email-template-triggers",
+    response_model=list[EmailTriggerOut],
+)
+def admin_list_email_template_triggers(
+    _: Annotated[Principal, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> list[EmailTriggerOut]:
+    raw = template_mail_service.list_trigger_definitions(db)
+    return [EmailTriggerOut.model_validate(x) for x in raw]
+
+
+@router.post(
+    "/email-templates",
+    response_model=EmailTemplateOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def admin_create_email_template(
+    body: EmailTemplateCreate,
+    _: Annotated[Principal, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> EmailTemplateOut:
+    try:
+        row = template_mail_service.create_template(
+            db,
+            body.trigger_key,
+            subject=body.subject,
+            body=body.body,
+        )
+    except ValueError as e:
+        msg = str(e)
+        code = (
+            status.HTTP_409_CONFLICT
+            if "already exists" in msg.lower()
+            else status.HTTP_400_BAD_REQUEST
+        )
+        raise HTTPException(status_code=code, detail=msg) from None
+    return EmailTemplateOut.model_validate(row)
+
+
+@router.delete("/email-templates/{name}", status_code=status.HTTP_204_NO_CONTENT)
+def admin_delete_email_template(
+    name: str,
+    _: Annotated[Principal, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> None:
+    try:
+        template_mail_service.delete_template(db, name)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from None
+
+
 @router.get("/email-templates/{template_name}", response_model=EmailTemplateOut)
 def admin_get_email_template(
     template_name: str,
     _: Annotated[Principal, Depends(require_admin)],
     db: Annotated[Session, Depends(get_db)],
 ) -> EmailTemplateOut:
-    template_mail_service.ensure_default_templates(db)
     row = template_mail_service.get_template(db, template_name)
     if not row:
         raise HTTPException(
@@ -741,12 +809,93 @@ def list_users(
     )
     pages = max(1, ceil(total / limit)) if limit else 1
     return PaginatedUsers(
-        items=[UserOut.model_validate(u) for u in users],
+        items=admin_service.users_with_workspace_quota_context(db, users),
         total=total,
         page=page,
         limit=limit,
         pages=pages,
     )
+
+
+def _usage_history_day_start_utc(s: str | None) -> datetime | None:
+    if not s or not str(s).strip():
+        return None
+    try:
+        d = date.fromisoformat(str(s).strip()[:10])
+        return datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def _usage_history_day_end_utc(s: str | None) -> datetime | None:
+    if not s or not str(s).strip():
+        return None
+    try:
+        d = date.fromisoformat(str(s).strip()[:10])
+        return datetime(
+            d.year, d.month, d.day, 23, 59, 59, 999999, tzinfo=timezone.utc
+        )
+    except ValueError:
+        return None
+
+
+@router.get("/usage-history", response_model=PaginatedUsageHistory)
+def admin_list_usage_history(
+    _: Annotated[Principal, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+    q: str | None = Query(default=None, max_length=200),
+    date_from: str | None = Query(default=None, max_length=32),
+    date_to: str | None = Query(default=None, max_length=32),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> PaginatedUsageHistory:
+    df = _usage_history_day_start_utc(date_from)
+    dt = _usage_history_day_end_utc(date_to)
+    page = PaginationParams.clamp_page(page)
+    limit = PaginationParams.clamp_limit(limit)
+    rows, total = usage_history_service.list_admin(
+        db, q=q, date_from=df, date_to=dt, page=page, page_limit=limit
+    )
+    uids = [r.user_id for r in rows if r.user_id is not None]
+    email_by_id: dict[int, str] = {}
+    if uids:
+        for u in db.query(User).filter(User.id.in_(uids)).all():
+            email_by_id[u.id] = u.email
+    items = [
+        UsageHistoryUserOut(
+            id=r.id,
+            user_id=r.user_id,
+            workspace_id=r.workspace_id,
+            action_type=r.action_type,
+            old_limit=r.old_limit,
+            new_limit=r.new_limit,
+            plan_type=r.plan_type,
+            expiry_date=r.expiry_date,
+            changed_by=r.changed_by,
+            summary=r.summary,
+            created_at=r.created_at,
+            user_email=email_by_id.get(r.user_id) if r.user_id else None,
+        )
+        for r in rows
+    ]
+    pages = max(1, ceil(total / limit)) if limit else 1
+    return PaginatedUsageHistory(
+        items=items,
+        total=total,
+        page=page,
+        limit=limit,
+        pages=pages,
+    )
+
+
+@router.post("/usage-history/delete", response_model=DeletedCountOut)
+def admin_delete_usage_history(
+    body: UsageHistoryDeleteRequest,
+    _: Annotated[Principal, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> DeletedCountOut:
+    n = usage_history_service.delete_ids(db, list(body.ids))
+    return DeletedCountOut(deleted=n)
 
 
 @router.patch("/users/{user_id}", response_model=UserOut)
@@ -760,7 +909,9 @@ def patch_user(
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
     _guard_admin_vs_same_email_user(db, principal, target, patch=body)
-    u = admin_service.patch_user(db, user_id, body)
+    u = admin_service.patch_user(
+        db, user_id, body, changed_by=principal.admin_id
+    )
     return UserOut.model_validate(u)
 
 
@@ -791,8 +942,10 @@ def delete_user(
 @router.put("/settings", response_model=SettingsOut)
 def update_settings(
     body: AdminSettingsUpdate,
-    _: Annotated[Principal, Depends(require_admin)],
+    principal: Annotated[Principal, Depends(require_admin)],
     db: Annotated[Session, Depends(get_db)],
 ) -> SettingsOut:
-    row = admin_service.update_admin_settings(db, body)
+    row = admin_service.update_admin_settings(
+        db, body, changed_by=principal.admin_id
+    )
     return get_settings_out(db, row.workspace_id, mask_api_key=False)

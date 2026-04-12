@@ -11,7 +11,9 @@ from models.user import User
 from models.workspace import Workspace
 from schemas.pagination import PaginationParams
 from schemas.settings import AdminSettingsUpdate
-from schemas.user import UserAdminPatch, UserCreate
+from schemas.user import UserAdminPatch, UserCreate, UserListItemOut
+from services import usage_history_service
+from services.settings_service import count_workspace_ai_messages
 from schemas.workspace import WorkspacePlanUpdate
 from services import system_log_service, template_mail_service as tm
 
@@ -136,6 +138,48 @@ def list_users(
     return items, total
 
 
+def users_with_workspace_quota_context(
+    db: Session, users: list[User]
+) -> list[UserListItemOut]:
+    """Attach workspace plan + AI quota snapshot (usage is per workspace, same for all members)."""
+    if not users:
+        return []
+    wids = list({u.workspace_id for u in users})
+    workspaces = {
+        w.id: w for w in db.query(Workspace).filter(Workspace.id.in_(wids)).all()
+    }
+    settings_map = {
+        r.workspace_id: r
+        for r in db.query(WorkspaceSettings).filter(
+            WorkspaceSettings.workspace_id.in_(wids)
+        ).all()
+    }
+    used_map = {wid: count_workspace_ai_messages(db, wid) for wid in wids}
+    out: list[UserListItemOut] = []
+    for u in users:
+        ws = workspaces.get(u.workspace_id)
+        st = settings_map.get(u.workspace_id)
+        lim = max(0, int(st.usage_limit or 0)) if st else 0
+        used = used_map.get(u.workspace_id, 0)
+        exhausted = lim > 0 and used >= lim
+        p = (ws.plan_type or "free").lower() if ws else "free"
+        out.append(
+            UserListItemOut(
+                id=u.id,
+                email=u.email,
+                workspace_id=u.workspace_id,
+                display_name=u.display_name,
+                phone=u.phone,
+                is_active=u.is_active,
+                workspace_plan_type=p,
+                workspace_ai_limit=lim,
+                workspace_ai_used=used,
+                workspace_ai_quota_exhausted=exhausted,
+            )
+        )
+    return out
+
+
 def get_workspace_settings(db: Session, workspace_id: int) -> WorkspaceSettings:
     row = (
         db.query(WorkspaceSettings)
@@ -148,34 +192,81 @@ def get_workspace_settings(db: Session, workspace_id: int) -> WorkspaceSettings:
 
 
 def update_workspace_plan(
-    db: Session, workspace_id: int, data: WorkspacePlanUpdate
+    db: Session,
+    workspace_id: int,
+    data: WorkspacePlanUpdate,
+    *,
+    changed_by: int | None = None,
 ) -> Workspace:
     ws = db.get(Workspace, workspace_id)
     if not ws or ws.name not in (FREE_WORKSPACE_NAME, PRO_WORKSPACE_NAME):
         raise HTTPException(status_code=404, detail="Workspace not found")
-    ws.plan_type = data.plan_type
-    ws.plan_expires_at = data.plan_expires_at
+    old_plan = (ws.plan_type or "free").lower()
+    old_exp = ws.plan_expires_at
     row = (
         db.query(WorkspaceSettings)
         .filter(WorkspaceSettings.workspace_id == workspace_id)
         .first()
     )
+    old_lim = max(0, int(row.usage_limit or 0)) if row else 0
+
+    ws.plan_type = data.plan_type
+    ws.plan_expires_at = data.plan_expires_at
     if row:
         row.usage_limit = _usage_limit_for_plan(data.plan_type)
+        row.usage_email_90_sent = False
+        row.usage_email_limit_sent = False
         if data.plan_type == "free":
             row.api_key = None
             row.ai_mode = "local"
     db.commit()
     db.refresh(ws)
+    if row:
+        db.refresh(row)
+
+    from services.plan_expiry_notify_service import clear_expiry_email_flag_if_plan_valid
+
+    clear_expiry_email_flag_if_plan_valid(db, workspace_id)
+
+    new_lim = max(0, int(row.usage_limit or 0)) if row else 0
+    plan_changed = old_plan != (data.plan_type or "free").lower()
+    lim_changed = old_lim != new_lim
+    exp_changed = old_exp != data.plan_expires_at
+    if plan_changed or lim_changed or exp_changed:
+        if plan_changed and data.plan_type == "pro" and old_plan != "pro":
+            action = usage_history_service.ACTION_UPGRADE
+        elif plan_changed and data.plan_type == "free" and old_plan == "pro":
+            action = usage_history_service.ACTION_DOWNGRADE
+        elif exp_changed and not plan_changed and not lim_changed:
+            action = usage_history_service.ACTION_PLAN_RENEW
+        else:
+            action = usage_history_service.ACTION_WORKSPACE_PLAN_CHANGE
+        usage_history_service.append_for_workspace_users(
+            db,
+            workspace_id,
+            action_type=action,
+            old_limit=old_lim,
+            new_limit=new_lim,
+            plan_type=data.plan_type,
+            expiry_date=ws.plan_expires_at,
+            changed_by=changed_by,
+            summary="Admin updated workspace plan, cap, or expiry.",
+        )
     return ws
 
 
-def update_admin_settings(db: Session, data: AdminSettingsUpdate) -> WorkspaceSettings:
+def update_admin_settings(
+    db: Session,
+    data: AdminSettingsUpdate,
+    *,
+    changed_by: int | None = None,
+) -> WorkspaceSettings:
     ws = db.get(Workspace, data.workspace_id)
     if not ws or ws.name not in (FREE_WORKSPACE_NAME, PRO_WORKSPACE_NAME):
         raise HTTPException(status_code=404, detail="Workspace not found")
     plan = (ws.plan_type or "free").lower()
     row = get_workspace_settings(db, data.workspace_id)
+    old_lim = max(0, int(row.usage_limit or 0))
     if data.ai_mode is not None:
         if plan != "pro" and data.ai_mode == "api":
             raise HTTPException(
@@ -192,6 +283,8 @@ def update_admin_settings(db: Session, data: AdminSettingsUpdate) -> WorkspaceSe
         row.api_key = data.api_key or None
     if data.usage_limit is not None:
         row.usage_limit = data.usage_limit
+        row.usage_email_90_sent = False
+        row.usage_email_limit_sent = False
     # Allow clearing workspace override with explicit null in JSON (PUT body).
     if "ollama_model" in data.model_fields_set:
         row.ollama_model = (data.ollama_model or "").strip() or None
@@ -200,6 +293,20 @@ def update_admin_settings(db: Session, data: AdminSettingsUpdate) -> WorkspaceSe
         row.api_key = None
     db.commit()
     db.refresh(row)
+    db.refresh(ws)
+    new_lim_final = max(0, int(row.usage_limit or 0))
+    if data.usage_limit is not None and old_lim != new_lim_final:
+        usage_history_service.append_for_workspace_users(
+            db,
+            data.workspace_id,
+            action_type=usage_history_service.ACTION_LIMIT_UPDATE,
+            old_limit=old_lim,
+            new_limit=new_lim_final,
+            plan_type=plan,
+            expiry_date=ws.plan_expires_at,
+            changed_by=changed_by,
+            summary="Admin changed workspace AI message limit.",
+        )
     return row
 
 
@@ -220,10 +327,64 @@ def delete_user(db: Session, user_id: int) -> None:
     )
 
 
-def patch_user(db: Session, user_id: int, data: UserAdminPatch) -> User:
+def move_user_to_workspace_plan(
+    db: Session,
+    user_id: int,
+    plan: Literal["free", "pro"],
+    *,
+    changed_by: int | None,
+) -> User:
     u = db.get(User, user_id)
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
+    new_ws = workspace_for_plan(db, plan)
+    if u.workspace_id == new_ws.id:
+        return u
+    old_wid = u.workspace_id
+    old_ws = db.get(Workspace, old_wid)
+    old_st = get_workspace_settings(db, old_wid)
+    old_plan = (old_ws.plan_type or "free").lower() if old_ws else "free"
+    old_lim = max(0, int(old_st.usage_limit or 0))
+    u.workspace_id = new_ws.id
+    db.commit()
+    db.refresh(u)
+    new_st = get_workspace_settings(db, new_ws.id)
+    new_lim = max(0, int(new_st.usage_limit or 0))
+    if plan == "pro" and old_plan != "pro":
+        action = usage_history_service.ACTION_UPGRADE
+    elif plan == "free" and old_plan == "pro":
+        action = usage_history_service.ACTION_DOWNGRADE
+    else:
+        action = usage_history_service.ACTION_WORKSPACE_PLAN_CHANGE
+    usage_history_service.append_entry(
+        db,
+        user_id=u.id,
+        workspace_id=new_ws.id,
+        action_type=action,
+        old_limit=old_lim,
+        new_limit=new_lim,
+        plan_type=plan,
+        expiry_date=new_ws.plan_expires_at,
+        changed_by=changed_by,
+        summary=f"User moved to {plan} workspace pool.",
+    )
+    return u
+
+
+def patch_user(
+    db: Session,
+    user_id: int,
+    data: UserAdminPatch,
+    *,
+    changed_by: int | None = None,
+) -> User:
+    u = db.get(User, user_id)
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+    if data.plan is not None:
+        u = move_user_to_workspace_plan(
+            db, user_id, data.plan, changed_by=changed_by
+        )
     was_active = u.is_active
     if data.is_active is not None:
         u.is_active = data.is_active

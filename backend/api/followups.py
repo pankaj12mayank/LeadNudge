@@ -21,6 +21,24 @@ from services import followup_service
 router = APIRouter(prefix="/followups", tags=["followups"])
 
 
+def _followup_to_out(db: Session, fu) -> FollowupOut:
+    last_msg = followup_service.followup_draft_content(db, fu.id)
+    lead_row = db.get(Lead, fu.lead_id)
+    hint = FollowupOut.send_window_from_scheduled(fu.scheduled_at)
+    return FollowupOut(
+        id=fu.id,
+        lead_id=fu.lead_id,
+        lead_name=lead_row.name if lead_row else None,
+        scheduled_at=fu.scheduled_at,
+        status=fu.status,
+        followup_type=getattr(fu, "followup_type", "normal") or "normal",
+        send_window_hint=hint,
+        last_message=last_msg,
+        failure_reason=fu.failure_reason,
+        sent_at=fu.sent_at,
+    )
+
+
 def _workspace_scope(principal: Principal, workspace_id: int | None) -> int | None:
     if principal.role == "admin":
         return workspace_id
@@ -47,19 +65,8 @@ def list_followups(
         db, workspace_id=wid, is_admin=principal.role == "admin", page=page, limit=limit
     )
     out: list[FollowupOut] = []
-    for fu, last_msg, lead_name in rows:
-        out.append(
-            FollowupOut(
-                id=fu.id,
-                lead_id=fu.lead_id,
-                lead_name=lead_name,
-                scheduled_at=fu.scheduled_at,
-                status=fu.status,
-                last_message=last_msg,
-                failure_reason=fu.failure_reason,
-                sent_at=fu.sent_at,
-            )
-        )
+    for fu, _last_msg, _lead_name in rows:
+        out.append(_followup_to_out(db, fu))
     pages = max(1, ceil(total / limit)) if limit else 1
     return PaginatedFollowups(
         items=out,
@@ -82,19 +89,11 @@ def create_followup(
         workspace_id=principal.workspace_id,
         is_admin=principal.role == "admin",
     )
-    lead_row = db.get(Lead, fu.lead_id)
-    lead_nm = lead_row.name if lead_row else None
+    fo = _followup_to_out(db, fu)
+    if msg is not None:
+        fo = fo.model_copy(update={"last_message": msg.content})
     return FollowupCreateResponse(
-        followup=FollowupOut(
-            id=fu.id,
-            lead_id=fu.lead_id,
-            lead_name=lead_nm,
-            scheduled_at=fu.scheduled_at,
-            status=fu.status,
-            last_message=msg.content if msg else None,
-            failure_reason=fu.failure_reason,
-            sent_at=fu.sent_at,
-        ),
+        followup=fo,
         message=MessageOut.model_validate(msg) if msg else None,
     )
 
@@ -113,18 +112,7 @@ def patch_followup(
         workspace_id=principal.workspace_id,
         is_admin=principal.role == "admin",
     )
-    last_msg = followup_service.followup_draft_content(db, fu.id)
-    lead_row = db.get(Lead, fu.lead_id)
-    return FollowupOut(
-        id=fu.id,
-        lead_id=fu.lead_id,
-        lead_name=lead_row.name if lead_row else None,
-        scheduled_at=fu.scheduled_at,
-        status=fu.status,
-        last_message=last_msg,
-        failure_reason=fu.failure_reason,
-        sent_at=fu.sent_at,
-    )
+    return _followup_to_out(db, fu)
 
 
 @router.delete("/{followup_id}", status_code=204)

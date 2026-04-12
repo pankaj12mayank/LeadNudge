@@ -345,7 +345,13 @@ export default function EmailSettings() {
                 placeholder="e.g. Alex Kumar"
               />
               <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-                Fills {"{{sender_name}}"}. If empty, the first part of your sender email is used.
+                Used for the email <strong className="font-medium">From</strong> display name (shown
+                next to your SMTP address in the recipient&apos;s inbox), for{" "}
+                <code className="rounded bg-neutral-100 px-1 text-[11px] dark:bg-neutral-800">
+                  {"{{sender_name}}"}
+                </code>{" "}
+                in subject/greeting/closing, and appended to the closing if you omit that
+                placeholder.
               </p>
             </div>
             <button type="submit" disabled={savingTemplates} className="btn-primary">

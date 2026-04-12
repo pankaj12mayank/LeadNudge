@@ -17,5 +17,8 @@ class Followup(Base):
     sent_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    followup_type: Mapped[str] = mapped_column(
+        String(16), default="normal", nullable=False
+    )
 
     lead: Mapped["Lead"] = relationship("Lead", back_populates="followups")

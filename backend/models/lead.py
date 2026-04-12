@@ -1,7 +1,13 @@
-from sqlalchemy import ForeignKey, Integer, String, Text
+from datetime import datetime, timezone
+
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db.base import Base
+
+
+def _utc_now():
+    return datetime.now(timezone.utc)
 
 
 class Lead(Base):
@@ -15,6 +21,13 @@ class Lead(Base):
     phone_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
     country_code: Mapped[str | None] = mapped_column(String(8), nullable=True)
     last_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    company: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    temperature_tag: Mapped[str | None] = mapped_column(
+        String(16), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utc_now, index=True
+    )
     workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"), index=True)
 
     workspace: Mapped["Workspace"] = relationship("Workspace", back_populates="leads")

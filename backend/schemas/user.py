@@ -20,9 +20,19 @@ class UserOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class UserListItemOut(UserOut):
+    """User row in admin list with workspace AI quota snapshot (shared per workspace)."""
+
+    workspace_plan_type: str = "free"
+    workspace_ai_limit: int = 0
+    workspace_ai_used: int = 0
+    workspace_ai_quota_exhausted: bool = False
+
+
 class UserAdminPatch(BaseModel):
     is_active: bool | None = None
     display_name: str | None = Field(default=None, max_length=120)
+    plan: Literal["free", "pro"] | None = None
 
 
 class AdminUserPasswordSet(BaseModel):
@@ -42,7 +52,7 @@ class UserPasswordUpdate(BaseModel):
 
 
 class PaginatedUsers(BaseModel):
-    items: list[UserOut]
+    items: list[UserListItemOut]
     total: int
     page: int
     limit: int

@@ -7,9 +7,11 @@ from api.deps import Principal, get_principal
 from db.session import get_db
 from schemas.auth import LoginRequest, MeOut, TokenResponse
 from schemas.password_request import PasswordRequestCreate
+from models.workspace import Workspace
 from services import admin_account_service, auth_service
 from services import password_request_service
 from services import user_profile_service
+from services.plan_access_service import workspace_plan_expired
 from utils.logger import get_logger
 
 log = get_logger("auth")
@@ -57,14 +59,14 @@ def auth_me(
             detail="Invalid session",
         )
     u = user_profile_service.get_user(db, principal.user_id)
-    if not u.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Your account has been deactivated. Contact admin.",
-        )
+    auth_service.assert_user_portal_access(db, u)
+    ws = db.get(Workspace, u.workspace_id)
+    wpt = (ws.plan_type or "free").lower() if ws else "free"
     return MeOut(
         role="user",
         email=u.email,
         display_name=u.display_name,
         phone=u.phone,
+        workspace_plan_expired=workspace_plan_expired(db, u.workspace_id),
+        workspace_plan_type=wpt,
     )

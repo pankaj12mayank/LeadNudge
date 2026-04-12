@@ -4,10 +4,14 @@ import re
 import smtplib
 import ssl
 from email.message import EmailMessage
+from email.utils import formataddr
 
 from core.paths import BACKEND_ROOT
 from models.lead import Lead
 from models.settings import WorkspaceSettings
+from utils.logger import get_logger
+
+log = get_logger("email")
 
 
 def _followup_template_vars(lead: Lead, settings_row: WorkspaceSettings) -> dict[str, str]:
@@ -25,13 +29,12 @@ def _followup_template_vars(lead: Lead, settings_row: WorkspaceSettings) -> dict
 
 
 def _apply_followup_placeholders(template: str, vars_map: dict[str, str]) -> str:
+    """Replace {{key}} and common {key} typos."""
     out = template
     for key, val in vars_map.items():
         out = out.replace("{{" + key + "}}", val)
+        out = out.replace("{" + key + "}", val)
     return out
-from utils.logger import get_logger
-
-log = get_logger("email")
 
 _EMAIL_LOG_PATH = BACKEND_ROOT / "logs" / "email.log"
 _file_log = logging.getLogger("ais.email_file")
@@ -69,9 +72,9 @@ _EMOJI_RE = re.compile(
 )
 
 
-def _clean_body(text: str) -> str:
+def _sanitize_ai_middle(text: str) -> str:
+    """Strip emoji; trim whitespace. Preserve **phrase** for HTML bold in the MIME HTML part."""
     t = _EMOJI_RE.sub("", text)
-    t = re.sub(r"\*{1,2}([^*]+)\*{1,2}", r"\1", t)
     lines = [ln.rstrip() for ln in t.splitlines()]
     while lines and not lines[0].strip():
         lines.pop(0)
@@ -80,24 +83,48 @@ def _clean_body(text: str) -> str:
     return "\n".join(lines).strip()
 
 
+def _strip_bold_markers_for_plain_mime(text: str) -> str:
+    """Plain-text alternative: show emphasized words without asterisks."""
+    return re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+
+
+def _line_with_bold_html(line: str) -> str:
+    """Escape a line; segments wrapped in **double asterisks** become <strong>."""
+    if "**" not in line:
+        return html.escape(line)
+    parts = re.split(r"(\*\*[^*]+\*\*)", line)
+    out: list[str] = []
+    for p in parts:
+        if not p:
+            continue
+        if len(p) >= 4 and p.startswith("**") and p.endswith("**"):
+            inner = p[2:-2]
+            out.append(
+                f'<strong style="font-weight:600;">{html.escape(inner)}</strong>'
+            )
+        else:
+            out.append(html.escape(p))
+    return "".join(out)
+
+
+def _plain_body_to_html_fragment(plain: str) -> str:
+    blocks = [b.strip() for b in plain.split("\n\n") if b.strip()]
+    if not blocks:
+        t = _line_with_bold_html(plain.strip() or " ")
+        return f'<p style="margin:0 0 1em 0;">{t}</p>'
+    parts: list[str] = []
+    for b in blocks:
+        inner = "<br/>".join(_line_with_bold_html(ln) for ln in b.split("\n"))
+        parts.append(f'<p style="margin:0 0 1em 0;">{inner}</p>')
+    return "".join(parts)
+
+
 def workspace_smtp_ready(settings_row: WorkspaceSettings) -> bool:
     """True when host, port, and sender email are set (password optional for some relays)."""
     host = (settings_row.smtp_host or "").strip()
     port = settings_row.smtp_port
     user = (settings_row.smtp_email or "").strip()
     return bool(host and port is not None and user)
-
-
-def _plain_body_to_html_fragment(plain: str) -> str:
-    blocks = [b.strip() for b in plain.split("\n\n") if b.strip()]
-    if not blocks:
-        t = html.escape(plain.strip() or " ")
-        return f"<p style=\"margin:0 0 1em 0;\">{t}</p>"
-    parts: list[str] = []
-    for b in blocks:
-        inner = "<br/>".join(html.escape(ln) for ln in b.split("\n"))
-        parts.append(f'<p style="margin:0 0 1em 0;">{inner}</p>')
-    return "".join(parts)
 
 
 def build_followup_html(body_plain: str) -> str:
@@ -137,8 +164,15 @@ def format_followup_email(
     if not closing_tpl:
         closing_tpl = "Best regards,\n{{sender_name}}"
     closing = _apply_followup_placeholders(closing_tpl, vm).strip()
+    # If the user saved a display name but did not use {{sender_name}} in the closing, append it
+    # so the sign-off still shows (common expectation from the "Your name" field).
+    sn = (vm.get("sender_name") or "").strip()
+    if sn:
+        has_ph = "{{sender_name}}" in closing_tpl or "{sender_name}" in closing_tpl
+        if not has_ph and sn.lower() not in closing.lower():
+            closing = f"{closing}\n\n{sn}".strip()
 
-    body_mid = _clean_body(ai_message)
+    body_mid = _sanitize_ai_middle(ai_message)
     if not body_mid:
         body_mid = (
             "I wanted to follow up and see if you had any questions or a good time to reconnect."
@@ -146,6 +180,11 @@ def format_followup_email(
 
     body_plain = f"{opening}\n\n{body_mid}\n\n{closing}".strip()
     return subject, body_plain
+
+
+def followup_plain_text_for_mime(full_body_plain: str) -> str:
+    """Use for EmailMessage.set_content so text/plain has no ** markers."""
+    return _strip_bold_markers_for_plain_mime(full_body_plain)
 
 
 def send_followup_email(
@@ -168,11 +207,15 @@ def send_followup_email(
         log.warning("Lead has no email; skip send")
         return
 
+    display = (settings_row.followup_sender_display_name or "").strip()
+    if not display:
+        display = user.split("@")[0].replace(".", " ").title() if user else "Team"
+
     msg = EmailMessage()
     msg["Subject"] = subject
-    msg["From"] = user
+    msg["From"] = formataddr((display, user))
     msg["To"] = to_addr
-    msg.set_content(body_plain)
+    msg.set_content(followup_plain_text_for_mime(body_plain))
     msg.add_alternative(
         build_followup_html(body_plain),
         subtype="html",

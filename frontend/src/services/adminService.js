@@ -36,6 +36,26 @@ export async function patchUser(userId, payload) {
   return data;
 }
 
+export async function listAdminUsageHistory({
+  page = 1,
+  limit = 50,
+  q,
+  date_from,
+  date_to,
+} = {}) {
+  const params = { page, limit };
+  if (q) params.q = q;
+  if (date_from) params.date_from = date_from;
+  if (date_to) params.date_to = date_to;
+  const { data } = await api.get("/admin/usage-history", { params });
+  return data;
+}
+
+export async function deleteAdminUsageHistory(ids) {
+  const { data } = await api.post("/admin/usage-history/delete", { ids });
+  return data;
+}
+
 export async function deleteUser(userId) {
   await api.delete(`/admin/users/${userId}`);
 }
@@ -50,6 +70,22 @@ export async function setUserPassword(userId, newPassword) {
 export async function listEmailTemplates() {
   const { data } = await api.get("/admin/email-templates");
   return data;
+}
+
+export async function listEmailTemplateTriggers() {
+  const { data } = await api.get("/admin/email-template-triggers");
+  return data;
+}
+
+export async function createEmailTemplate(payload) {
+  const { data } = await api.post("/admin/email-templates", payload);
+  return data;
+}
+
+export async function deleteEmailTemplate(name) {
+  await api.delete(
+    `/admin/email-templates/${encodeURIComponent(name)}`,
+  );
 }
 
 export async function getEmailTemplate(name) {

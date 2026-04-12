@@ -15,3 +15,9 @@ export const STORAGE_KEYS = {
   email: "ais_email",
   displayName: "ais_display_name",
 };
+
+/** sessionStorage: one AI-quota notice per tab session (login or first dashboard load). */
+export const SESSION_QUOTA_TOAST_KEY = "ais_ai_quota_limit_toast_shown";
+
+/** sessionStorage: one plan-expired notice per tab session after login. */
+export const SESSION_PLAN_EXPIRED_TOAST_KEY = "ais_plan_expired_toast_shown";

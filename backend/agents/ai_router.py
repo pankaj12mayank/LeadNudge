@@ -140,6 +140,10 @@ def _post_generate_once(
         "model": model,
         "prompt": _sanitize_ollama_text(prompt),
         "stream": False,
+        "options": {
+            "temperature": 0.88,
+            "top_p": 0.92,
+        },
     }
     r = client.post(gen_url, json=body)
     if r.status_code != 200:
@@ -171,6 +175,10 @@ def _post_chat_once(
         "model": model,
         "messages": [{"role": "user", "content": _sanitize_ollama_text(prompt)}],
         "stream": False,
+        "options": {
+            "temperature": 0.88,
+            "top_p": 0.92,
+        },
     }
     r = client.post(url, json=body)
     if r.status_code != 200:

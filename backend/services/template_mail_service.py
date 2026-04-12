@@ -18,8 +18,60 @@ TEMPLATE_ACCOUNT_ACTIVATED = "account_activated"
 TEMPLATE_ACCOUNT_DEACTIVATED = "account_deactivated"
 TEMPLATE_PASSWORD_CHANGED = "password_changed"
 TEMPLATE_USAGE_LIMIT_REACHED = "usage_limit_reached"
+TEMPLATE_USAGE_WARNING_90 = "usage_warning_90"
 TEMPLATE_PLAN_EXPIRED = "plan_expired"
 TEMPLATE_PASSWORD_REQUEST_RECEIVED = "password_request_received"
+
+# Human-readable catalog for admin UI (key → title, when it fires).
+EMAIL_TRIGGER_CATALOG: list[tuple[str, str, str]] = [
+    (
+        TEMPLATE_ACCOUNT_CREATED,
+        "Account created",
+        "When an admin creates a new user and a temporary password is set.",
+    ),
+    (
+        TEMPLATE_ACCOUNT_DELETED,
+        "Account deleted",
+        "When a user account is removed from the workspace.",
+    ),
+    (
+        TEMPLATE_ACCOUNT_ACTIVATED,
+        "Account activated",
+        "When a deactivated user is activated again.",
+    ),
+    (
+        TEMPLATE_ACCOUNT_DEACTIVATED,
+        "Account deactivated",
+        "When an admin pauses a user’s sign-in access.",
+    ),
+    (
+        TEMPLATE_PASSWORD_CHANGED,
+        "Password set / changed",
+        "When an admin sets a new password for a user (e.g. Set password & notify).",
+    ),
+    (
+        TEMPLATE_USAGE_WARNING_90,
+        "Usage warning",
+        "When a workspace reaches about 90% of its AI message allowance (once per cycle).",
+    ),
+    (
+        TEMPLATE_USAGE_LIMIT_REACHED,
+        "AI usage limit reached",
+        "When a workspace hits its AI message cap (scheduling new AI follow-ups stops until admin raises the limit).",
+    ),
+    (
+        TEMPLATE_PLAN_EXPIRED,
+        "Plan expired",
+        "When a workspace plan end date has passed.",
+    ),
+    (
+        TEMPLATE_PASSWORD_REQUEST_RECEIVED,
+        "Password help request",
+        "When a user submits “request password help” on the login page.",
+    ),
+]
+
+EMAIL_TRIGGER_KEYS: frozenset[str] = frozenset(k for k, _, _ in EMAIL_TRIGGER_CATALOG)
 
 _DEFAULT_SUBJECTS_BODIES: list[tuple[str, str, str]] = [
     (
@@ -53,9 +105,25 @@ _DEFAULT_SUBJECTS_BODIES: list[tuple[str, str, str]] = [
         "<p>Sign in with your email {{email}}, then change your password from Profile if you like.</p>",
     ),
     (
+        TEMPLATE_USAGE_WARNING_90,
+        "Approaching your AI message limit",
+        "<p>Hi {{name}},</p>"
+        "<p>Your workspace has used about <strong>{{usage_percent}}%</strong> of its AI message "
+        "allowance (<strong>{{used}}</strong> of <strong>{{limit}}</strong> messages).</p>"
+        "<p>Please contact your administrator soon so they can raise the limit if you need to keep "
+        "scheduling AI follow-ups.</p>"
+        "<p>— {{project_name}}</p>",
+    ),
+    (
         TEMPLATE_USAGE_LIMIT_REACHED,
-        "AI usage limit reached",
-        "<p>Hi {{name}},</p><p>Your workspace has reached its AI message limit. Contact your administrator to upgrade the plan.</p>",
+        "AI message quota exhausted",
+        "<p>Hi {{name}},</p>"
+        "<p>Your workspace has reached its AI message limit (<strong>{{used}}</strong> of "
+        "<strong>{{limit}}</strong> used). <strong>New AI follow-ups cannot be scheduled or "
+        "generated</strong> until your administrator increases the workspace limit under "
+        "Admin → AI setup.</p>"
+        "<p>Please contact your administrator to upgrade or extend your monthly allowance.</p>"
+        "<p>— {{project_name}}</p>",
     ),
     (
         TEMPLATE_PLAN_EXPIRED,
@@ -105,14 +173,57 @@ def get_template(db: Session, name: str) -> EmailTemplate | None:
 
 
 def list_templates(db: Session) -> list[EmailTemplate]:
-    ensure_default_templates(db)
+    """List rows as stored; defaults are inserted on app init, not on every list."""
     return db.query(EmailTemplate).order_by(EmailTemplate.name).all()
+
+
+def list_trigger_definitions(db: Session) -> list[dict[str, str | bool]]:
+    """All known triggers and whether a row exists (after delete, has_template is False)."""
+    existing = {t.name for t in db.query(EmailTemplate).all()}
+    out: list[dict[str, str | bool]] = []
+    for key, label, desc in EMAIL_TRIGGER_CATALOG:
+        out.append(
+            {
+                "key": key,
+                "label": label,
+                "description": desc,
+                "has_template": key in existing,
+            }
+        )
+    return out
+
+
+def create_template(db: Session, name: str, *, subject: str, body: str) -> EmailTemplate:
+    key = (name or "").strip()
+    if key not in EMAIL_TRIGGER_KEYS:
+        raise ValueError("Invalid or unsupported trigger key")
+    if get_template(db, key):
+        raise ValueError("A template for this trigger already exists")
+    row = EmailTemplate(
+        name=key,
+        subject=(subject or "").strip() or "Notification",
+        body=body if body is not None else "<p></p>",
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def delete_template(db: Session, name: str) -> None:
+    key = (name or "").strip()
+    if key not in EMAIL_TRIGGER_KEYS:
+        raise ValueError("Unknown trigger key")
+    row = get_template(db, key)
+    if not row:
+        raise ValueError("Template not found")
+    db.delete(row)
+    db.commit()
 
 
 def update_template(
     db: Session, name: str, *, subject: str, body: str
 ) -> EmailTemplate:
-    ensure_default_templates(db)
     row = get_template(db, name)
     if not row:
         raise ValueError(f"Unknown template: {name}")
@@ -129,7 +240,6 @@ def send_template_email(
     to_email: str,
     variables: dict[str, Any],
 ) -> None:
-    ensure_default_templates(db)
     t = get_template(db, template_key)
     if not t:
         raise ValueError(f"Missing template {template_key}")

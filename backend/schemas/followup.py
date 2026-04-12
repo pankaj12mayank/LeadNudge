@@ -1,5 +1,6 @@
 import math
 from datetime import datetime, timezone
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_serializer
 
@@ -7,6 +8,7 @@ from pydantic import BaseModel, Field, field_serializer
 class FollowupCreate(BaseModel):
     lead_id: int
     scheduled_at: datetime
+    followup_type: Literal["normal", "recovery"] = "normal"
 
 
 class FollowupUpdate(BaseModel):
@@ -22,6 +24,8 @@ class FollowupOut(BaseModel):
     lead_name: str | None = None
     scheduled_at: datetime
     status: str
+    followup_type: str = "normal"
+    send_window_hint: str | None = None
     last_message: str | None = None
     failure_reason: str | None = None
     sent_at: datetime | None = None
@@ -37,6 +41,19 @@ class FollowupOut(BaseModel):
             v = v.astimezone(timezone.utc)
         s = v.isoformat(timespec="seconds")
         return s.replace("+00:00", "Z")
+
+    @staticmethod
+    def send_window_from_scheduled(v: datetime) -> str:
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=timezone.utc)
+        else:
+            v = v.astimezone(timezone.utc)
+        h = v.hour
+        if 5 <= h < 12:
+            return "morning"
+        if 12 <= h < 17:
+            return "afternoon"
+        return "evening"
 
     @field_serializer("sent_at")
     @staticmethod

@@ -1,5 +1,6 @@
 import csv
 import io
+from datetime import datetime, timezone
 from typing import BinaryIO
 
 from fastapi import HTTPException, status
@@ -7,10 +8,67 @@ from pydantic import EmailStr, TypeAdapter, ValidationError
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from core.validation import is_valid_phone, normalize_country_code
+from core.validation import (
+    is_csv_phone_numeric,
+    is_valid_import_country_code,
+    is_valid_phone,
+    normalize_country_code,
+)
 from models.lead import Lead
-from schemas.lead import LeadCreate, LeadCsvImportResult, LeadUpdate, sanitize_csv_cell
+from schemas.lead import (
+    ALLOWED_LEAD_STATUSES,
+    LeadCreate,
+    LeadCsvImportResult,
+    LeadUpdate,
+    sanitize_csv_cell,
+)
 from schemas.pagination import PaginationParams
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def temperature_for_created_at(
+    created_at: datetime, *, now: datetime | None = None
+) -> str:
+    now = now or _utc_now()
+    ca = created_at
+    if ca.tzinfo is None:
+        ca = ca.replace(tzinfo=timezone.utc)
+    else:
+        ca = ca.astimezone(timezone.utc)
+    age_days = (now - ca).total_seconds() / 86400.0
+    if age_days <= 2:
+        return "hot"
+    if age_days <= 7:
+        return "warm"
+    return "cold"
+
+
+def recompute_all_temperature_tags(db: Session) -> int:
+    now = _utc_now()
+    rows = db.query(Lead).all()
+    changed = 0
+    for lead in rows:
+        if lead.created_at is None:
+            continue
+        tt = temperature_for_created_at(lead.created_at, now=now)
+        if lead.temperature_tag != tt:
+            lead.temperature_tag = tt
+            changed += 1
+    if changed:
+        db.commit()
+    return changed
+
+
+def _map_csv_status(raw: str | None) -> str:
+    if not raw or not str(raw).strip():
+        return "new"
+    k = str(raw).strip().lower().replace(" ", "_")
+    if k in ALLOWED_LEAD_STATUSES:
+        return k
+    return "new"
 
 
 def _get_lead_in_workspace(db: Session, lead_id: int, workspace_id: int) -> Lead:
@@ -28,6 +86,7 @@ def list_leads(
     page: int,
     limit: int,
     search: str | None = None,
+    status: str | None = None,
 ) -> tuple[list[Lead], int]:
     q = db.query(Lead)
     if is_admin:
@@ -37,6 +96,8 @@ def list_leads(
         if workspace_id is None:
             return [], 0
         q = q.filter(Lead.workspace_id == workspace_id)
+    if status and str(status).strip():
+        q = q.filter(Lead.status == str(status).strip().lower())
     if search and search.strip():
         term = f"%{search.strip()}%"
         q = q.filter(
@@ -52,6 +113,7 @@ def list_leads(
 
 def create_lead(db: Session, workspace_id: int, data: LeadCreate) -> Lead:
     lm = (data.last_message or "").strip() or None
+    co = (data.company or "").strip() or None
     lead = Lead(
         name=data.name,
         email=data.email,
@@ -59,8 +121,10 @@ def create_lead(db: Session, workspace_id: int, data: LeadCreate) -> Lead:
         tag=data.tag,
         phone_number=data.phone_number,
         country_code=data.country_code,
+        company=co,
         last_message=lm,
         workspace_id=workspace_id,
+        temperature_tag="hot",
     )
     db.add(lead)
     db.commit()
@@ -95,8 +159,12 @@ def update_lead(
         lead.phone_number = data.phone_number
     if data.country_code is not None:
         lead.country_code = data.country_code
+    if data.company is not None:
+        lead.company = (data.company or "").strip() or None
     if data.last_message is not None:
         lead.last_message = (data.last_message or "").strip() or None
+    if lead.created_at:
+        lead.temperature_tag = temperature_for_created_at(lead.created_at)
     db.commit()
     db.refresh(lead)
     return lead
@@ -179,12 +247,15 @@ def import_leads_from_csv(
     skipped = 0
     errors: list[str] = []
     row_num = 1
+    total_rows = 0
+    imported_emails: list[str] = []
 
     for row in reader:
         row_num += 1
         if row_num > max_rows + 2:
             errors.append(f"Stopped after {max_rows} data rows")
             break
+        total_rows += 1
 
         def col(key: str) -> str:
             k = fields_lower[key]
@@ -193,7 +264,7 @@ def import_leads_from_csv(
 
         name = col("name")
         email_raw = col("email")
-        phone = col("phone") or None
+        phone_raw = col("phone") or ""
         cc_raw = col("country_code") or None
 
         if not name or not email_raw:
@@ -208,10 +279,24 @@ def import_leads_from_csv(
             errors.append(f"Row {row_num}: invalid email")
             continue
 
+        if not phone_raw.strip():
+            skipped += 1
+            errors.append(f"Row {row_num}: phone required")
+            continue
+        if not is_csv_phone_numeric(phone_raw):
+            skipped += 1
+            errors.append(f"Row {row_num}: phone must be numeric")
+            continue
+        phone = phone_raw.strip()
+
+        if not is_valid_import_country_code(cc_raw):
+            skipped += 1
+            errors.append(f"Row {row_num}: country_code required (+digits or ISO)")
+            continue
         cc = normalize_country_code(cc_raw)
         if phone and not is_valid_phone(phone):
             skipped += 1
-            errors.append(f"Row {row_num}: invalid phone")
+            errors.append(f"Row {row_num}: invalid phone format")
             continue
 
         if db.query(Lead).filter(Lead.workspace_id == workspace_id, Lead.email == email_raw).first():
@@ -219,24 +304,51 @@ def import_leads_from_csv(
             errors.append(f"Row {row_num}: duplicate email in workspace")
             continue
 
-        last_m = None
-        if "last_message" in fields_lower:
-            raw_lm = col("last_message")
-            last_m = raw_lm if raw_lm else None
+        notes_val = col("notes") if "notes" in fields_lower else ""
+        lm_csv = col("last_message") if "last_message" in fields_lower else ""
+        last_m = (notes_val or lm_csv or "").strip() or None
+
+        csv_status = col("status") if "status" in fields_lower else ""
+        lead_status = _map_csv_status(csv_status or None)
+
+        company = None
+        if "company" in fields_lower:
+            c = col("company")
+            company = c if c else None
 
         db.add(
             Lead(
                 name=name,
                 email=email_raw,
-                status="new",
+                status=lead_status,
                 tag=None,
                 phone_number=phone,
                 country_code=cc,
+                company=company,
                 last_message=last_m,
                 workspace_id=workspace_id,
+                temperature_tag="hot",
             )
         )
+        imported_emails.append(email_raw)
         inserted += 1
 
     db.commit()
-    return LeadCsvImportResult(inserted=inserted, skipped=skipped, errors=errors[:50])
+    if imported_emails:
+        for lead in (
+            db.query(Lead)
+            .filter(
+                Lead.workspace_id == workspace_id,
+                Lead.email.in_(imported_emails),
+            )
+            .all()
+        ):
+            if lead.created_at:
+                lead.temperature_tag = temperature_for_created_at(lead.created_at)
+        db.commit()
+    return LeadCsvImportResult(
+        total_rows=total_rows,
+        inserted=inserted,
+        skipped=skipped,
+        errors=errors[:50],
+    )

@@ -1,4 +1,5 @@
 import random
+import re
 import traceback
 from datetime import datetime, timezone
 
@@ -6,6 +7,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
+from agents.ai_router import FALLBACK_FOLLOWUP_BODY
 from agents.followup_agent import generate_followup
 from models.followup import Followup
 from models.lead import Lead
@@ -13,12 +15,55 @@ from models.message import Message
 from models.workspace import Workspace
 from models.outbound_email import OutboundEmail
 from models.settings import WorkspaceSettings
-from schemas.followup import FollowupCreate, FollowupUpdate
+from schemas.followup import FollowupCreate, FollowupOut, FollowupUpdate
 from schemas.pagination import PaginationParams
 from services import email_service
 from utils.logger import get_logger
 
 log = get_logger("followup")
+
+
+def _emphasize_lead_last_message_in_body(body: str, last_message: str | None) -> str:
+    """
+    Ensure the lead's saved last_message appears as **bold** in the draft, never wrapped in
+    parentheses or square brackets. Fixes model output like: ... shared (Interested).
+    """
+    lm = (last_message or "").strip()
+    if not lm or len(lm) < 2:
+        return body
+    if len(lm) > 600:
+        lm = lm[:600]
+
+    esc = re.escape(lm)
+
+    def _paren_to_bold(m: re.Match[str]) -> str:
+        inner = m.group(1).strip()
+        return f"**{inner}**"
+
+    out = re.sub(rf"\(\s*({esc})\s*\)", _paren_to_bold, body, flags=re.IGNORECASE)
+    out = re.sub(rf"\[\s*({esc})\s*\]", _paren_to_bold, out, flags=re.IGNORECASE)
+
+    pieces = re.split(r"(\*\*[^*]+\*\*)", out)
+    rebuilt: list[str] = []
+    for piece in pieces:
+        if piece.startswith("**") and piece.endswith("**") and len(piece) >= 4:
+            rebuilt.append(piece)
+            continue
+        n = lm.strip()
+        if len(n) <= 120 and " " not in n and "\n" not in n:
+            m = re.search(rf"\b({esc})\b", piece, flags=re.IGNORECASE)
+        else:
+            m = re.search(esc, piece, flags=re.IGNORECASE)
+        if not m:
+            rebuilt.append(piece)
+            continue
+        a, b = m.span()
+        matched = piece[a:b]
+        rebuilt.append(piece[:a] + f"**{matched}**" + piece[b:])
+    out = "".join(rebuilt)
+
+    out = re.sub(r"\*{4,}", "**", out)
+    return out
 
 
 def _standalone_log(kind: str, message: str) -> None:
@@ -116,6 +161,19 @@ def followup_draft_content(db: Session, followup_id: int) -> str | None:
     return msg.content if msg else None
 
 
+def _prior_completed_followups(db: Session, lead_id: int, before_id: int) -> int:
+    return int(
+        db.query(func.count(Followup.id))
+        .filter(
+            Followup.lead_id == lead_id,
+            Followup.id < before_id,
+            Followup.status.in_(("sent", "draft_ready")),
+        )
+        .scalar()
+        or 0
+    )
+
+
 def create_followup(
     db: Session,
     data: FollowupCreate,
@@ -130,11 +188,24 @@ def create_followup(
     if not is_admin:
         if workspace_id is None or lead.workspace_id != workspace_id:
             raise HTTPException(status_code=404, detail="Lead not found")
+        from services import usage_alerts_service
+        from services.plan_access_service import ai_features_blocked, ai_block_user_message
 
+        usage_alerts_service.sync_usage_threshold_emails(db, workspace_id)
+        if ai_features_blocked(db, workspace_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=ai_block_user_message(db, workspace_id),
+            )
+
+    ft = getattr(data, "followup_type", "normal") or "normal"
+    if ft not in ("normal", "recovery"):
+        ft = "normal"
     fu = Followup(
         lead_id=data.lead_id,
         scheduled_at=data.scheduled_at,
         status="pending",
+        followup_type=ft,
     )
     db.add(fu)
     db.commit()
@@ -193,23 +264,36 @@ def _process_one_due_followup(db: Session, fu: Followup) -> None:
     ws_row = db.get(Workspace, ws_id)
     workspace_plan = (ws_row.plan_type if ws_row else "free") or "free"
     settings = _get_settings(db, ws_id)
-    used = _workspace_message_count(db, ws_id)
-    if used >= settings.usage_limit:
-        from services.workspace_notifications import (
-            deactivate_workspace_users_for_usage_limit,
-        )
+    from services import usage_alerts_service
+    from services.plan_access_service import ai_features_blocked, ai_block_user_message
 
-        deactivate_workspace_users_for_usage_limit(db, ws_id)
+    usage_alerts_service.sync_usage_threshold_emails(db, ws_id)
+    if ai_features_blocked(db, ws_id):
         fu.status = "ai_failed"
-        fu.failure_reason = (
-            "Workspace AI message limit reached. Contact support to upgrade your plan."
-        )
+        fu.failure_reason = ai_block_user_message(db, ws_id)
         db.commit()
         return
 
     ctx = _conversation_context_for_lead(db, lead.id, fu.id)
     prev_bodies = _recent_ai_followup_bodies(db, lead.id, 3)
     tone = random.choice(["friendly", "professional", "direct"])
+    fu_type = (getattr(fu, "followup_type", None) or "normal").lower()
+    if fu_type == "recovery":
+        message_kind = random.choice(
+            ["recovery_friendly", "recovery_reminder", "recovery_offer"]
+        )
+    else:
+        prior = _prior_completed_followups(db, lead.id, fu.id)
+        if prior == 0:
+            message_kind = "first_contact"
+        elif prior < 3:
+            message_kind = "followup_reminder"
+        else:
+            message_kind = "closing_attempt"
+    timing_key = FollowupOut.send_window_from_scheduled(fu.scheduled_at)
+    timing_label = {"morning": "Morning", "afternoon": "Afternoon", "evening": "Evening"}.get(
+        timing_key, timing_key
+    )
     try:
         om = (settings.ollama_model or "").strip() or None
         content = generate_followup(
@@ -217,6 +301,7 @@ def _process_one_due_followup(db: Session, fu: Followup) -> None:
             lead_email=lead.email,
             lead_status=lead.status,
             lead_tag=lead.tag,
+            lead_company=(lead.company or "").strip() or None,
             ai_mode=settings.ai_mode,
             api_key=settings.api_key,
             ollama_model=om,
@@ -224,6 +309,10 @@ def _process_one_due_followup(db: Session, fu: Followup) -> None:
             previous_followup_bodies=prev_bodies,
             tone=tone,
             workspace_plan=workspace_plan,
+            message_kind=message_kind,
+            send_timing_label=timing_label,
+            lead_id=lead.id,
+            followup_id=fu.id,
         )
     except Exception as e:
         fu.status = "ai_failed"
@@ -236,7 +325,8 @@ def _process_one_due_followup(db: Session, fu: Followup) -> None:
         )
         return
 
-    if not (content or "").strip():
+    stripped = (content or "").strip()
+    if not stripped:
         fu.status = "ai_failed"
         fu.failure_reason = "Message generation failed. Please try again."
         db.commit()
@@ -246,9 +336,32 @@ def _process_one_due_followup(db: Session, fu: Followup) -> None:
         )
         return
 
+    if stripped == (FALLBACK_FOLLOWUP_BODY or "").strip():
+        nm = (lead.name or "").strip() or "there"
+        co = (lead.company or "").strip()
+        lm = (lead.last_message or "").strip()
+        if lm:
+            raw = lm[:200] + ("…" if len(lm) > 200 else "")
+            snippet = " ".join(raw.replace("*", " ").split())
+            content = (
+                f"I am following up regarding what you shared — you had mentioned **{snippet}**. "
+                f"{nm}, reply when convenient and we can pick this up."
+            )
+        else:
+            content = (
+                f"Checking in with you, {nm}"
+                + (f" at {co}" if co else "")
+                + " — let me know a good time to reconnect or if priorities have shifted."
+            )
+
+    content = _emphasize_lead_last_message_in_body(
+        (content or "").strip(),
+        lead.last_message,
+    )
+
     msg = Message(
         lead_id=lead.id,
-        content=content.strip(),
+        content=content,
         followup_id=fu.id,
     )
     db.add(msg)
@@ -291,6 +404,9 @@ def _process_one_due_followup(db: Session, fu: Followup) -> None:
         "ACTIVITY",
         f"AI draft for lead «{lead.name}» (follow-up #{fu.id}, workspace {ws_id})",
     )
+    from services import usage_alerts_service
+
+    usage_alerts_service.sync_usage_threshold_emails(db, ws_id)
 
 
 def patch_followup(

@@ -137,9 +137,15 @@ export default function Followups() {
       } catch {
         /* ignore */
       }
-    } catch {
+    } catch (e) {
+      const msg = (e && e.message) || "";
+      const quota =
+        e?.status === 403 ||
+        /quota|limit exhausted|administrator/i.test(msg);
       toast.error(
-        "Temporary issue scheduling your follow-up. Please try again in a moment.",
+        quota
+          ? msg
+          : "Temporary issue scheduling your follow-up. Please try again in a moment.",
       );
     } finally {
       setSaving(false);
@@ -250,6 +256,38 @@ export default function Followups() {
       key: "scheduled_at",
       label: "Scheduled",
       render: (r) => formatScheduleDisplay(r.scheduled_at),
+    },
+    {
+      key: "send_window_hint",
+      label: "AI timing",
+      render: (r) => {
+        const h = (r.send_window_hint || "").toLowerCase();
+        const label =
+          h === "morning"
+            ? "Morning"
+            : h === "afternoon"
+              ? "Afternoon"
+              : h === "evening"
+                ? "Evening"
+                : h || "—";
+        return (
+          <span className="text-sm text-neutral-600 dark:text-neutral-400" title="Based on scheduled time (UTC hour)">
+            {label}
+          </span>
+        );
+      },
+    },
+    {
+      key: "followup_type",
+      label: "Type",
+      render: (r) => {
+        const rec = (r.followup_type || "normal") === "recovery";
+        return (
+          <Badge variant={rec ? "outline" : "muted"}>
+            {rec ? "Recovery" : "Normal"}
+          </Badge>
+        );
+      },
     },
     {
       key: "priority",
@@ -445,6 +483,13 @@ export default function Followups() {
               />
               <p className="text-xs text-neutral-500 dark:text-neutral-400">
                 Uses your device timezone. The API stores UTC; the table below shows local time.
+              </p>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                <span className="font-medium text-neutral-600 dark:text-neutral-300">Smart timing:</span>{" "}
+                the model adjusts tone for <strong>Morning</strong>, <strong>Afternoon</strong>, or{" "}
+                <strong>Evening</strong> based on the <strong>UTC hour</strong> of the scheduled instant
+                (see &quot;AI timing&quot; column after you save). Pick a local time that lands in the
+                window you want in UTC, or schedule roughly morning / afternoon / evening UTC.
               </p>
             </div>
           </div>

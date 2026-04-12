@@ -17,17 +17,21 @@ import Workspaces from "./pages/admin/Workspaces";
 import Users from "./pages/admin/Users";
 import AISettings from "./pages/admin/AISettings";
 import Usage from "./pages/admin/Usage";
+import UsageHistory from "./pages/admin/UsageHistory";
 import AdminLogs from "./pages/admin/AdminLogs";
 import PasswordRequests from "./pages/admin/PasswordRequests";
 import EmailTemplates from "./pages/admin/EmailTemplates";
+import EmailTemplateCreate from "./pages/admin/EmailTemplateCreate";
 import EmailTemplateEdit from "./pages/admin/EmailTemplateEdit";
 import Dashboard from "./pages/user/Dashboard";
+import UsageActivity from "./pages/user/UsageActivity";
 import Leads from "./pages/user/Leads";
 import Followups from "./pages/user/Followups";
 import SentMails from "./pages/user/SentMails";
 import EmailSettings from "./pages/user/EmailSettings";
 import Profile from "./pages/user/Profile";
 import FollowupReminderListener from "./components/FollowupReminderListener";
+import UsageLimitBanner from "./components/UsageLimitBanner";
 
 /** Short labels for the top header (each page hero title is different, set in the page). */
 const NAV_TITLES = {
@@ -38,9 +42,11 @@ const NAV_TITLES = {
   "/admin/email-templates": "Email templates",
   "/admin/ai-settings": "AI setup",
   "/admin/usage": "Usage",
+  "/admin/usage-history": "Usage history",
   "/admin/logs": "Logs",
   "/admin/account": "Branding",
   "/dashboard": "Overview",
+  "/usage-activity": "Activity",
   "/leads": "Leads",
   "/followups": "Follow-ups",
   "/sent-mails": "Sent mail",
@@ -49,6 +55,9 @@ const NAV_TITLES = {
 };
 
 function headerTitle(pathname, variant) {
+  if (pathname === "/admin/email-templates/new") {
+    return "Add template";
+  }
   if (
     pathname.startsWith("/admin/email-templates/") &&
     pathname !== "/admin/email-templates"
@@ -109,6 +118,7 @@ function Shell({ variant }) {
           </button>
         </div>
         <Navbar title={navTitle} />
+        {variant === "user" ? <UsageLimitBanner /> : null}
         <main className="flex-1 w-full min-w-0 overflow-auto">
           <Outlet />
         </main>
@@ -129,12 +139,14 @@ export default function App() {
           <Route path="/admin/users" element={<Users />} />
           <Route path="/admin/password-requests" element={<PasswordRequests />} />
           <Route path="/admin/email-templates" element={<EmailTemplates />} />
+          <Route path="/admin/email-templates/new" element={<EmailTemplateCreate />} />
           <Route
             path="/admin/email-templates/:templateName"
             element={<EmailTemplateEdit />}
           />
           <Route path="/admin/ai-settings" element={<AISettings />} />
           <Route path="/admin/usage" element={<Usage />} />
+          <Route path="/admin/usage-history" element={<UsageHistory />} />
           <Route path="/admin/logs" element={<AdminLogs />} />
           <Route path="/admin/account" element={<AdminAccount />} />
         </Route>
@@ -143,6 +155,7 @@ export default function App() {
       <Route element={<ProtectedRoute allowedRoles={["user"]} />}>
         <Route element={<Shell variant="user" />}>
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/usage-activity" element={<UsageActivity />} />
           <Route path="/leads" element={<Leads />} />
           <Route path="/followups" element={<Followups />} />
           <Route path="/sent-mails" element={<SentMails />} />

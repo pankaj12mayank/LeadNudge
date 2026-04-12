@@ -18,3 +18,6 @@ class MeOut(BaseModel):
     email: str
     display_name: str | None = None
     phone: str | None = None
+    # Workspace user only — plan expiry does not block login; UI may show banners.
+    workspace_plan_expired: bool = False
+    workspace_plan_type: str | None = None

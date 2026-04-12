@@ -9,12 +9,14 @@ const adminLinks = [
   { to: "/admin/email-templates", label: "Email templates" },
   { to: "/admin/ai-settings", label: "AI configuration" },
   { to: "/admin/usage", label: "Usage" },
+  { to: "/admin/usage-history", label: "Usage history" },
   { to: "/admin/logs", label: "Logs & mail" },
   { to: "/admin/account", label: "Account & branding" },
 ];
 
 const userLinks = [
   { to: "/dashboard", label: "Overview" },
+  { to: "/usage-activity", label: "Plan & usage activity" },
   { to: "/leads", label: "Leads" },
   { to: "/followups", label: "Follow-ups" },
   { to: "/sent-mails", label: "Sent mail" },

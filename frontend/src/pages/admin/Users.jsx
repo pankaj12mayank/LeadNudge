@@ -9,6 +9,10 @@ import PasswordField from "../../components/PasswordField";
 import * as adminService from "../../services/adminService";
 import { workspaceLabel } from "../../utils/workspaceLabel";
 
+/** Defaults must match backend `admin_service.FREE_PLAN_AI_LIMIT` / `PRO_PLAN_AI_LIMIT`. */
+const DEFAULT_AI_LIMIT_FREE = 200;
+const DEFAULT_AI_LIMIT_PRO = 10_000;
+
 function planLabel(t) {
   return t === "pro" ? "Paid (Pro)" : "Free";
 }
@@ -37,6 +41,10 @@ export default function Users() {
   const [pwUser, setPwUser] = useState(null);
   const [newPw, setNewPw] = useState("");
   const [pwSaving, setPwSaving] = useState(false);
+  const [limitRow, setLimitRow] = useState(null);
+  const [limitInput, setLimitInput] = useState("");
+  const [limitSaving, setLimitSaving] = useState(false);
+  const [adminEmailNorm, setAdminEmailNorm] = useState("");
 
   const wsById = useMemo(() => {
     const m = {};
@@ -45,6 +53,23 @@ export default function Users() {
     });
     return m;
   }, [workspaces]);
+
+  useEffect(() => {
+    let c = false;
+    (async () => {
+      try {
+        const me = await adminService.getAdminMe();
+        if (!c) {
+          setAdminEmailNorm(String(me.email || "").trim().toLowerCase());
+        }
+      } catch {
+        if (!c) setAdminEmailNorm("");
+      }
+    })();
+    return () => {
+      c = true;
+    };
+  }, []);
 
   async function loadUsers() {
     setListLoading(true);
@@ -182,6 +207,41 @@ export default function Users() {
       },
     },
     {
+      key: "pool_switch",
+      label: "Pool",
+      render: (r) => {
+        const cur = (r.workspace_plan_type ?? "free").toLowerCase();
+        const isSelf =
+          (r.email || "").trim().toLowerCase() === adminEmailNorm;
+        return (
+          <select
+            className="form-select max-w-[7rem] text-xs"
+            value={cur}
+            disabled={isSelf}
+            title={
+              isSelf
+                ? "You cannot change pool for the admin sign-in identity."
+                : "Move user between Free and Pro workspace pools"
+            }
+            onChange={async (e) => {
+              const v = e.target.value;
+              if (v === cur) return;
+              try {
+                await adminService.patchUser(r.id, { plan: v });
+                toast.success("User moved to the selected pool.");
+                await loadUsers();
+              } catch (err) {
+                toast.error(err.message);
+              }
+            }}
+          >
+            <option value="free">Free</option>
+            <option value="pro">Pro</option>
+          </select>
+        );
+      },
+    },
+    {
       key: "is_active",
       label: "Access",
       render: (r) => (
@@ -191,36 +251,73 @@ export default function Users() {
       ),
     },
     {
-      key: "actions",
-      label: "",
+      key: "ai_quota",
+      label: "AI quota (workspace)",
       render: (r) => (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex max-w-[11rem] flex-col gap-1 text-xs">
+          <span className="text-neutral-700 dark:text-neutral-300">
+            {(r.workspace_ai_used ?? 0).toLocaleString()} /{" "}
+            {(r.workspace_ai_limit ?? 0).toLocaleString()} msgs
+          </span>
+          {r.workspace_ai_quota_exhausted ? (
+            <Badge variant="hot">At limit</Badge>
+          ) : null}
           <button
             type="button"
-            className="text-xs font-medium text-blue-700 underline decoration-blue-300 underline-offset-2 dark:text-blue-400"
+            className="w-fit text-left font-medium text-blue-700 underline decoration-blue-300 underline-offset-2 dark:text-blue-400"
             onClick={() => {
-              setPwUser(r);
-              setNewPw("");
+              setLimitRow(r);
+              setLimitInput(String(r.workspace_ai_limit ?? 0));
             }}
           >
-            Set password
-          </button>
-          <button
-            type="button"
-            className="text-xs font-medium underline decoration-neutral-400 underline-offset-2"
-            onClick={() => toggleActive(r)}
-          >
-            {r.is_active ? "Deactivate" : "Activate"}
-          </button>
-          <button
-            type="button"
-            className="text-xs font-medium text-red-700 underline decoration-red-300 underline-offset-2 dark:text-red-400"
-            onClick={() => removeUser(r)}
-          >
-            Delete
+            Set workspace limit
           </button>
         </div>
       ),
+    },
+    {
+      key: "actions",
+      label: "",
+      render: (r) => {
+        const isSelf =
+          (r.email || "").trim().toLowerCase() === adminEmailNorm;
+        return (
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="text-xs font-medium text-blue-700 underline decoration-blue-300 underline-offset-2 dark:text-blue-400"
+              onClick={() => {
+                setPwUser(r);
+                setNewPw("");
+              }}
+            >
+              Set password
+            </button>
+            {!isSelf ? (
+              <>
+                <button
+                  type="button"
+                  className="text-xs font-medium underline decoration-neutral-400 underline-offset-2"
+                  onClick={() => toggleActive(r)}
+                >
+                  {r.is_active ? "Deactivate" : "Activate"}
+                </button>
+                <button
+                  type="button"
+                  className="text-xs font-medium text-red-700 underline decoration-red-300 underline-offset-2 dark:text-red-400"
+                  onClick={() => removeUser(r)}
+                >
+                  Delete
+                </button>
+              </>
+            ) : (
+              <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                Admin account
+              </span>
+            )}
+          </div>
+        );
+      },
     },
   ];
 
@@ -236,6 +333,9 @@ export default function Users() {
         <p className="mt-2 w-full text-sm text-neutral-600 dark:text-neutral-400">
           Invite people to the Free or Pro workspace. Use <strong>Set password</strong> when a user
           requested help from the sign-in page — they are emailed the new password if SMTP is set up.
+          AI message limits are per <strong>workspace</strong>; when the limit is reached, users stay
+          signed in but cannot schedule new AI follow-ups until you raise the limit (or change the pool
+          plan under Workspaces). Changing a limit here updates the user dashboard usage immediately.
         </p>
       </section>
 
@@ -383,6 +483,99 @@ export default function Users() {
           </>
         )}
       </Card>
+
+      {limitRow ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <Card
+            title="Workspace AI message limit"
+            className="relative z-10 w-full max-w-md shadow-xl"
+          >
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              Applies to everyone in{" "}
+              <strong>
+                {workspaceLabel(wsById[limitRow.workspace_id]?.name) || `workspace #${limitRow.workspace_id}`}
+              </strong>
+              . Current usage: {(limitRow.workspace_ai_used ?? 0).toLocaleString()} messages sent
+              (unchanged when you only change the cap).
+            </p>
+            <div className="mt-4">
+              <label className="form-label">New limit (messages)</label>
+              <input
+                type="number"
+                min={0}
+                className="form-input w-full"
+                value={limitInput}
+                onChange={(e) => setLimitInput(e.target.value)}
+                disabled={limitSaving}
+              />
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="btn-secondary text-xs"
+                disabled={limitSaving}
+                onClick={() => setLimitInput(String(DEFAULT_AI_LIMIT_FREE))}
+              >
+                Free default ({DEFAULT_AI_LIMIT_FREE.toLocaleString()})
+              </button>
+              <button
+                type="button"
+                className="btn-secondary text-xs"
+                disabled={limitSaving}
+                onClick={() => setLimitInput(String(DEFAULT_AI_LIMIT_PRO))}
+              >
+                Pro default ({DEFAULT_AI_LIMIT_PRO.toLocaleString()})
+              </button>
+            </div>
+            <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                className="btn-secondary w-full sm:w-auto"
+                disabled={limitSaving}
+                onClick={() => {
+                  setLimitRow(null);
+                  setLimitInput("");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-primary w-full sm:w-auto"
+                disabled={limitSaving}
+                onClick={async () => {
+                  const n = Number.parseInt(limitInput, 10);
+                  if (!Number.isFinite(n) || n < 0) {
+                    toast.warning("Enter a valid non-negative number.");
+                    return;
+                  }
+                  setLimitSaving(true);
+                  try {
+                    await adminService.updateAdminSettings({
+                      workspace_id: limitRow.workspace_id,
+                      usage_limit: n,
+                    });
+                    toast.success("AI message limit updated. Users see new cap on refresh.");
+                    setLimitRow(null);
+                    setLimitInput("");
+                    await loadUsers();
+                  } catch (e) {
+                    toast.error(e.message);
+                  } finally {
+                    setLimitSaving(false);
+                  }
+                }}
+              >
+                {limitSaving ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </Card>
+        </div>
+      ) : null}
 
       {pwUser ? (
         <div

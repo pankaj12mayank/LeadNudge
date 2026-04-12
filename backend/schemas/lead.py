@@ -1,7 +1,8 @@
 import math
 import re
+from datetime import datetime, timezone
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_serializer, field_validator
 
 from core.validation import is_valid_phone, normalize_country_code
 
@@ -17,6 +18,7 @@ class LeadCreate(BaseModel):
     tag: str | None = Field(default=None, max_length=128)
     phone_number: str | None = Field(default=None, max_length=64)
     country_code: str | None = Field(default=None, max_length=8)
+    company: str | None = Field(default=None, max_length=255)
     last_message: str | None = Field(
         default=None,
         max_length=20000,
@@ -50,6 +52,7 @@ class LeadUpdate(BaseModel):
     tag: str | None = Field(default=None, max_length=128)
     phone_number: str | None = Field(default=None, max_length=64)
     country_code: str | None = Field(default=None, max_length=8)
+    company: str | None = Field(default=None, max_length=255)
     last_message: str | None = Field(default=None, max_length=20000)
 
     @field_validator("phone_number")
@@ -84,10 +87,25 @@ class LeadOut(BaseModel):
     tag: str | None
     phone_number: str | None
     country_code: str | None
+    company: str | None = None
+    temperature_tag: str | None = None
     last_message: str | None = None
     workspace_id: int
+    created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("created_at")
+    @staticmethod
+    def _serialize_created_at(v: datetime | None) -> str | None:
+        if v is None:
+            return None
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=timezone.utc)
+        else:
+            v = v.astimezone(timezone.utc)
+        s = v.isoformat(timespec="seconds")
+        return s.replace("+00:00", "Z")
 
 
 class PaginatedLeads(BaseModel):
@@ -110,8 +128,11 @@ class PaginatedLeads(BaseModel):
 
 
 class LeadCsvImportResult(BaseModel):
-    inserted: int
-    skipped: int
+    total_rows: int = Field(
+        0, description="Data rows read from CSV (excluding header)"
+    )
+    inserted: int = Field(..., description="Successfully imported rows")
+    skipped: int = Field(..., description="Skipped / failed rows")
     errors: list[str] = Field(default_factory=list)
 
 

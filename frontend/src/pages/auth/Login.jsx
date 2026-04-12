@@ -7,7 +7,12 @@ import PasswordField from "../../components/PasswordField";
 import { useAuth } from "../../hooks/useAuth";
 import { useSite } from "../../context/SiteContext";
 import { mediaUrl } from "../../utils/mediaUrl";
+import {
+  SESSION_PLAN_EXPIRED_TOAST_KEY,
+  SESSION_QUOTA_TOAST_KEY,
+} from "../../utils/constants";
 import * as authService from "../../services/authService";
+import * as userService from "../../services/userService";
 
 function brandInitials(name) {
   const t = (name || "").trim();
@@ -90,11 +95,36 @@ export default function Login() {
     setSubmitting(true);
     try {
       const data = await login({ email: email.trim(), password });
+      toast.success("Welcome back");
+      if (data.role === "user") {
+        try {
+          const s = await userService.getSettings();
+          if (s.plan_expired && !sessionStorage.getItem(SESSION_PLAN_EXPIRED_TOAST_KEY)) {
+            sessionStorage.setItem(SESSION_PLAN_EXPIRED_TOAST_KEY, "1");
+            toast.error("Your plan has expired", {
+              description:
+                "Contact your administrator to renew or upgrade. You can still use the dashboard; AI follow-ups stay disabled until the plan is active again.",
+              duration: 12_000,
+            });
+          } else if (
+            s.ai_quota_exhausted &&
+            !sessionStorage.getItem(SESSION_QUOTA_TOAST_KEY)
+          ) {
+            sessionStorage.setItem(SESSION_QUOTA_TOAST_KEY, "1");
+            toast.error("AI message limit khatam ho chuka hai", {
+              description:
+                "Is period ke liye aapka AI message limit poora use ho gaya hai. Apne administrator se contact karke limit ya plan update karwayein.",
+              duration: 14_000,
+            });
+          }
+        } catch {
+          /* notices optional */
+        }
+      }
       navigate(
         data.role === "admin" ? "/admin/dashboard" : "/dashboard",
         { replace: true },
       );
-      toast.success("Welcome back");
     } catch (err) {
       setError(err.message || "Sign-in failed.");
     } finally {

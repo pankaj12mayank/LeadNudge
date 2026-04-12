@@ -22,6 +22,14 @@ Details: [`CLIENT_SETUP.md`](./CLIENT_SETUP.md) (B2B + cheap hosting plan) and [
 - **Security / ops:** JWT auth, admin cannot delete or deactivate their own matching workspace user, deactivated users get **403** on session check (forced logout in UI), transactional email logging (success/failure) and **system_logs** fallback on SMTP errors.
 - **One-click Windows start:** [`start.bat`](./start.bat) — backend, frontend, browser, Ollama check.
 
+### Sales automation (workspace user portal)
+
+- **CSV import (`Leads`):** required columns `name`, `email`, `phone` (numeric), `country_code` (e.g. `+91`, `+1`); optional `company`, `status`, `notes` (stored as lead context for AI). Invalid rows are skipped; the UI shows **total / success (सफल) / failed** and an error report. **Download Sample CSV** matches the bundled template (`GET /leads/csv-sample`).
+- **Lead heat tags:** after import (and nightly maintenance), leads get **HOT** (about 0–2 days since creation), **WARM** (about 3–7 days), **COLD** (older), shown as badges in **Leads** and on the dashboard table.
+- **AI follow-ups:** drafts vary by pipeline position (**first contact**, **follow-up reminder**, **closing attempt**) and avoid repeating recent sends; **recovery** follow-ups use friendly check-in / reminder / offer styles. **Morning / afternoon / evening** tone follows the **UTC hour** of `scheduled_at` (see **Follow-ups** → “AI timing”).
+- **Missed-lead recovery:** a **daily** job queues **recovery** follow-ups for leads with **no activity for 3–7 whole days** (no pending follow-up, not closed / not interested, at most one recovery send per 7 days). Processed with normal pending follow-up handling.
+- **Sales dashboard (`/dashboard`):** `GET /dashboard/summary` — totals, **follow-ups sent** (in date range), **manual replies** and **manual conversions** (editable under **Workspace settings** via the dashboard form), **recent leads** and **recent follow-ups**, with optional filters **date range** (on lead `created_at`) and **status**.
+
 ## Quick start (Windows)
 
 1. **Backend:** Python 3.11+, `pip install -r backend/requirements.txt`, copy `backend/.env.example` → `backend/.env`, set `BOOTSTRAP_ADMIN_*` and `SECRET_KEY`.
@@ -99,9 +107,11 @@ Failures are logged under **EMAIL** in system logs and sent-mail log where appli
 ### User flow
 
 1. Sign in with admin-created credentials.
-2. **Leads** → **Follow-ups** (AI drafts use Ollama on Free; Pro + API key may use OpenAI per rules above).
-3. **Profile** to update display name / phone; save is enabled only when something changed.
-4. If an admin deactivates the account, the next **`/auth/me`** check logs the user out with a clear message.
+2. **Overview (dashboard):** metrics, filters, recent leads/follow-ups, manual reply/conversion counts.
+3. **Leads:** download sample CSV → fill → import; manage contacts and heat tags.
+4. **Follow-ups:** schedule sends; AI runs at the scheduled time (Ollama on Free; Pro + API may use OpenAI per rules above). Quiet leads may receive **recovery** follow-ups from the daily job.
+5. **Profile** to update display name / phone; save is enabled only when something changed.
+6. If an admin deactivates the account, the next **`/auth/me`** check logs the user out with a clear message.
 
 ## Deployment
 

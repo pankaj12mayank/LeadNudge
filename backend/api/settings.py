@@ -81,6 +81,7 @@ def put_settings(
             api_key=body.api_key,
             usage_limit=body.usage_limit,
         ),
+        changed_by=principal.admin_id,
     )
     return get_settings_out(db, workspace_id, mask_api_key=False)
 

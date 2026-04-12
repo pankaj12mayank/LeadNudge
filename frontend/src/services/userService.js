@@ -2,11 +2,12 @@ import api from "./api";
 
 export async function listLeads(
   workspaceId,
-  { page = 1, limit = 50, q } = {},
+  { page = 1, limit = 50, q, status } = {},
 ) {
   const params = { page, limit };
   if (workspaceId != null) params.workspace_id = workspaceId;
   if (q) params.q = q;
+  if (status) params.status = status;
   const { data } = await api.get("/leads", { params });
   return data;
 }
@@ -112,4 +113,30 @@ export async function patchAccount(payload) {
 
 export async function postAccountPassword(payload) {
   await api.post("/account/password", payload);
+}
+
+export async function listAccountUsageHistory({ page = 1, limit = 30, q } = {}) {
+  const params = { page, limit };
+  if (q) params.q = q;
+  const { data } = await api.get("/account/usage-history", { params });
+  return data;
+}
+
+export async function deleteAccountUsageHistory(ids) {
+  const { data } = await api.post("/account/usage-history/delete", { ids });
+  return data;
+}
+
+/** Workspace user sales dashboard (metrics + recent rows). */
+export async function getSalesDashboardSummary({
+  date_from,
+  date_to,
+  status,
+} = {}) {
+  const params = {};
+  if (date_from) params.date_from = date_from;
+  if (date_to) params.date_to = date_to;
+  if (status) params.status = status;
+  const { data } = await api.get("/dashboard/summary", { params });
+  return data;
 }

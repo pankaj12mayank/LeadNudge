@@ -29,6 +29,12 @@ class WorkspaceSettings(Base):
     followup_sender_display_name: Mapped[str | None] = mapped_column(
         String(120), nullable=True
     )
+    dashboard_manual_replies: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    dashboard_manual_conversions: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    usage_email_90_sent: Mapped[bool] = mapped_column(default=False, nullable=False)
+    usage_email_limit_sent: Mapped[bool] = mapped_column(default=False, nullable=False)
 
     workspace: Mapped["Workspace"] = relationship(
         "Workspace", back_populates="settings_row"

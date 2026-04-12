@@ -85,10 +85,21 @@ export function AuthProvider({ children }) {
     setLoading(true);
     try {
       const data = await authService.login(creds.email, creds.password);
+      const trimmedEmail = creds.email.trim();
       setToken(data.access_token);
       setRole(data.role);
-      setEmail(creds.email.trim());
+      setEmail(trimmedEmail);
       setDisplayName(data.display_name || "");
+      // api.js reads the token from localStorage per request; React state updates
+      // before useEffects run, so persist immediately (e.g. getSettings right after login).
+      localStorage.setItem(STORAGE_KEYS.token, data.access_token);
+      localStorage.setItem(STORAGE_KEYS.role, data.role);
+      localStorage.setItem(STORAGE_KEYS.email, trimmedEmail);
+      if (data.display_name) {
+        localStorage.setItem(STORAGE_KEYS.displayName, data.display_name);
+      } else {
+        localStorage.removeItem(STORAGE_KEYS.displayName);
+      }
       return data;
     } finally {
       setLoading(false);

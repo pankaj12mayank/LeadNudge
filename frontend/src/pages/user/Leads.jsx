@@ -21,7 +21,7 @@ const emptyForm = {
   name: "",
   email: "",
   status: "new",
-  tag: "",
+  company: "",
   phoneE164: "",
   last_message: "",
 };
@@ -55,6 +55,7 @@ export default function Leads() {
   const [addOpen, setAddOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [batchDeleting, setBatchDeleting] = useState(false);
+  const [importSummary, setImportSummary] = useState(null);
 
   const idsOnPage = useMemo(
     () => new Set(rows.map((r) => r.id)),
@@ -127,7 +128,7 @@ export default function Leads() {
         name: form.name.trim(),
         email: form.email.trim(),
         status: form.status || "new",
-        tag: form.tag.trim() || null,
+        company: form.company.trim() || null,
         phone_number: ph.phone_number,
         country_code: ph.country_code,
         last_message: form.last_message.trim() || null,
@@ -157,7 +158,7 @@ export default function Leads() {
         name: editing.name.trim(),
         email: editing.email.trim(),
         status: editing.status || undefined,
-        tag: editing.tag?.trim() || null,
+        company: (editing.company || "").trim(),
         phone_number: ph.phone_number,
         country_code: ph.country_code,
         last_message: editing.last_message?.trim() || null,
@@ -222,8 +223,15 @@ export default function Leads() {
       return;
     }
     setImporting(true);
+    setImportSummary(null);
     try {
       const r = await userService.importLeadsCsv(file);
+      setImportSummary({
+        total_rows: r.total_rows ?? 0,
+        inserted: r.inserted ?? 0,
+        skipped: r.skipped ?? 0,
+        errors: r.errors ?? [],
+      });
       const msg = `Imported ${r.inserted} lead(s)${
         r.skipped ? `, skipped ${r.skipped}` : ""
       }`;
@@ -295,7 +303,30 @@ export default function Leads() {
       label: "Status",
       render: (r) => <Badge variant="muted">{r.status}</Badge>,
     },
-    { key: "tag", label: "Tag" },
+    {
+      key: "temperature_tag",
+      label: "Heat",
+      render: (r) => {
+        const t = (r.temperature_tag || "").toLowerCase();
+        if (!t) return <span className="text-neutral-400">—</span>;
+        const v =
+          t === "hot" ? "hot" : t === "warm" ? "warm" : t === "cold" ? "cold" : "muted";
+        return (
+          <Badge variant={v}>
+            {t === "hot" ? "HOT" : t === "warm" ? "WARM" : t === "cold" ? "COLD" : t}
+          </Badge>
+        );
+      },
+    },
+    {
+      key: "company",
+      label: "Company",
+      render: (r) => (
+        <span className="max-w-xs truncate text-sm text-neutral-600 dark:text-neutral-400">
+          {r.company || "—"}
+        </span>
+      ),
+    },
     {
       key: "last_message",
       label: "Last message",
@@ -319,7 +350,7 @@ export default function Leads() {
                 name: r.name,
                 email: r.email,
                 status: r.status,
-                tag: r.tag || "",
+                company: r.company || "",
                 phoneE164: r.phone_number || "",
                 last_message: r.last_message || "",
               })
@@ -387,14 +418,67 @@ export default function Leads() {
             disabled={importing}
             onClick={onDownloadSample}
           >
-            Download sample CSV
+            Download Sample CSV
           </button>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Required: name, email, phone, country_code (e.g. US). Optional: last_message (context for
-            AI follow-ups when there is no saved thread yet).
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            Required: <strong>name</strong>, <strong>email</strong>, <strong>phone</strong> (numeric),{" "}
+            <strong>country_code</strong> (e.g. +91, +1). Optional: <strong>company</strong>,{" "}
+            <strong>status</strong>, <strong>notes</strong> (saved as lead context for AI). Invalid
+            rows are skipped; see import summary below.
           </p>
         </div>
       </Card>
+
+      {importSummary ? (
+        <Card title="Last import summary">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 dark:border-neutral-700 dark:bg-neutral-900/60">
+              <p className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+                Total rows
+              </p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-neutral-900 dark:text-neutral-100">
+                {importSummary.total_rows}
+              </p>
+            </div>
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-900/50 dark:bg-emerald-950/40">
+              <p className="text-xs font-medium uppercase tracking-wide text-emerald-800 dark:text-emerald-200">
+                सफल (success)
+              </p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-emerald-900 dark:text-emerald-100">
+                {importSummary.inserted}
+              </p>
+            </div>
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900/50 dark:bg-red-950/40">
+              <p className="text-xs font-medium uppercase tracking-wide text-red-800 dark:text-red-200">
+                Failed / skipped
+              </p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-red-900 dark:text-red-100">
+                {importSummary.skipped}
+              </p>
+            </div>
+          </div>
+          {importSummary.errors?.length ? (
+            <details className="mt-4 rounded-md border border-neutral-200 dark:border-neutral-700">
+              <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-neutral-700 dark:text-neutral-200">
+                Error report ({importSummary.errors.length}
+                {importSummary.errors.length >= 50 ? "+" : ""})
+              </summary>
+              <ul className="max-h-48 list-inside list-disc overflow-y-auto border-t border-neutral-200 px-3 py-2 text-xs text-red-800 dark:border-neutral-700 dark:text-red-300">
+                {importSummary.errors.map((line, i) => (
+                  <li key={i}>{line}</li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+          <button
+            type="button"
+            className="btn-secondary mt-4"
+            onClick={() => setImportSummary(null)}
+          >
+            Dismiss summary
+          </button>
+        </Card>
+      ) : null}
 
       {addOpen && (
         <div
@@ -478,14 +562,15 @@ export default function Leads() {
                 </select>
               </div>
               <div>
-                <label className="form-label">Tag</label>
+                <label className="form-label">Company (optional)</label>
                 <input
                   className="form-input"
-                  value={form.tag}
+                  value={form.company}
                   onChange={(e) =>
-                    setForm((f) => ({ ...f, tag: e.target.value }))
+                    setForm((f) => ({ ...f, company: e.target.value }))
                   }
                   disabled={saving}
+                  placeholder="e.g. Acme Pvt Ltd"
                 />
               </div>
               <div className="sm:col-span-2">
@@ -594,13 +679,14 @@ export default function Leads() {
                 </select>
               </div>
               <div>
-                <label className="form-label">Tag</label>
+                <label className="form-label">Company (optional)</label>
                 <input
                   className="form-input"
-                  value={editing.tag}
+                  value={editing.company || ""}
                   onChange={(e) =>
-                    setEditing((x) => ({ ...x, tag: e.target.value }))
+                    setEditing((x) => ({ ...x, company: e.target.value }))
                   }
+                  placeholder="e.g. Acme Pvt Ltd"
                 />
               </div>
               <div className="sm:col-span-2">
