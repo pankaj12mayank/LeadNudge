@@ -396,6 +396,15 @@ def init_db() -> None:
     )
     _ensure_column_if_missing(
         "leads",
+        "owner_user_id",
+        sqlite_ddl="ALTER TABLE leads ADD COLUMN owner_user_id INTEGER",
+        postgres_ddl=(
+            "ALTER TABLE leads ADD COLUMN IF NOT EXISTS owner_user_id INTEGER "
+            "REFERENCES users(id) ON DELETE SET NULL"
+        ),
+    )
+    _ensure_column_if_missing(
+        "leads",
         "created_at",
         sqlite_ddl="ALTER TABLE leads ADD COLUMN created_at TIMESTAMP",
         postgres_ddl=(
@@ -534,6 +543,22 @@ def init_db() -> None:
         pass
 
     _ensure_followup_pending_lead_schedule_unique()
+
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE leads SET owner_user_id = ("
+                    "SELECT MIN(u.id) FROM users u WHERE u.workspace_id = leads.workspace_id "
+                    "AND u.is_active = 1"
+                    ") WHERE owner_user_id IS NULL AND ("
+                    "SELECT COUNT(*) FROM users u2 WHERE u2.workspace_id = leads.workspace_id "
+                    "AND u2.is_active = 1"
+                    ") = 1"
+                )
+            )
+    except Exception:
+        pass
 
     from services import admin_service
     from services.template_mail_service import ensure_default_templates

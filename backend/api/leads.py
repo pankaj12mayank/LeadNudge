@@ -56,6 +56,7 @@ def _leads_batch_delete_handler(
         list(body.ids),
         workspace_id=principal.workspace_id,
         is_admin=principal.role == "admin",
+        user_id=principal.user_id if principal.role == "user" else None,
     )
     return LeadsBatchDeleteOut(deleted=n)
 
@@ -103,6 +104,7 @@ def list_leads(
         limit=limit,
         search=q,
         status=status,
+        owner_user_id=principal.user_id if principal.role == "user" else None,
     )
     return PaginatedLeads.from_page(
         [LeadOut.model_validate(x) for x in rows],
@@ -133,7 +135,8 @@ def create_lead(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No workspace assigned to this account",
             )
-    lead = lead_service.create_lead(db, wid, body)
+    owner_uid = principal.user_id if principal.role == "user" else None
+    lead = lead_service.create_lead(db, wid, body, owner_user_id=owner_uid)
     return LeadOut.model_validate(lead)
 
 
@@ -166,7 +169,10 @@ async def import_leads_csv(
     raw = await file.read()
     import io
 
-    result = lead_service.import_leads_from_csv(db, wid, io.BytesIO(raw))
+    owner_uid = principal.user_id if principal.role == "user" else None
+    result = lead_service.import_leads_from_csv(
+        db, wid, io.BytesIO(raw), owner_user_id=owner_uid
+    )
     return result
 
 
@@ -183,6 +189,7 @@ def update_lead(
         body,
         workspace_id=principal.workspace_id,
         is_admin=principal.role == "admin",
+        user_id=principal.user_id if principal.role == "user" else None,
     )
     return LeadOut.model_validate(lead)
 
@@ -198,4 +205,5 @@ def delete_lead(
         lead_id,
         workspace_id=principal.workspace_id,
         is_admin=principal.role == "admin",
+        user_id=principal.user_id if principal.role == "user" else None,
     )

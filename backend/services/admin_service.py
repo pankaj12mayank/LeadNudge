@@ -1,11 +1,13 @@
 from typing import Literal
 
 from fastapi import HTTPException, status
-from sqlalchemy import or_
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from core.security import hash_password
 from core.workspaces import FREE_WORKSPACE_NAME, PRO_WORKSPACE_NAME
+from models.followup import Followup
+from models.lead import Lead
 from models.settings import WorkspaceSettings
 from models.user import User
 from models.workspace import Workspace
@@ -335,6 +337,20 @@ def delete_user(db: Session, user_id: int) -> None:
     email = u.email
     nm = (u.display_name or (email or "").split("@")[0] or "there").strip()
     pv = tm.project_variables(db)
+    owned_ids = list(
+        db.scalars(select(Lead.id).where(Lead.owner_user_id == user_id)).all()
+    )
+    if owned_ids:
+        db.query(Followup).filter(
+            Followup.lead_id.in_(owned_ids),
+            Followup.status == "pending",
+        ).update(
+            {
+                Followup.status: "cancelled",
+                Followup.failure_reason: "Workspace user was removed; schedule again if needed.",
+            },
+            synchronize_session=False,
+        )
     db.delete(u)
     db.commit()
     tm.try_send_template(

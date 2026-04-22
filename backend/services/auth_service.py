@@ -41,9 +41,6 @@ def login(db: Session, email: str, password: str) -> dict:
     user = db.query(User).filter(func.lower(User.email) == email_l).first()
     if user and verify_password(password, user.password):
         assert_user_portal_access(db, user)
-        from services.plan_expiry_notify_service import maybe_send_plan_expired_emails
-
-        maybe_send_plan_expired_emails(db, user.workspace_id)
         token = create_access_token(
             {
                 "role": "user",

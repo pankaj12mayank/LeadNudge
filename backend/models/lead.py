@@ -29,6 +29,12 @@ class Lead(Base):
         DateTime(timezone=True), default=_utc_now, index=True
     )
     workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"), index=True)
+    # Portal users only see leads they own; NULL = admin-visible only (unassigned legacy).
+    owner_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     workspace: Mapped["Workspace"] = relationship("Workspace", back_populates="leads")
     followups: Mapped[list["Followup"]] = relationship(

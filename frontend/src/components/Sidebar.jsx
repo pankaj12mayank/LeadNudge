@@ -3,6 +3,7 @@ import { mediaUrl } from "../utils/mediaUrl";
 
 const adminLinks = [
   { to: "/admin/dashboard", label: "Overview" },
+  { to: "/admin/leads", label: "All leads" },
   { to: "/admin/workspaces", label: "Workspaces" },
   { to: "/admin/users", label: "Team users" },
   { to: "/admin/password-requests", label: "Password requests" },
@@ -45,6 +46,7 @@ export default function Sidebar({
   projectName,
   logoUrl,
   supportEmail,
+  onSupportClick,
 }) {
   const links = variant === "admin" ? adminLinks : userLinks;
   const home = variant === "admin" ? "/admin/dashboard" : "/dashboard";
@@ -78,13 +80,14 @@ export default function Sidebar({
             {l.label}
           </NavLink>
         ))}
-        {variant === "user" && supportEmail ? (
-          <a
-            href={`mailto:${supportEmail}`}
-            className="block rounded-md px-3 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-900"
+        {supportEmail && (variant === "user" || variant === "admin") ? (
+          <button
+            type="button"
+            className="block w-full rounded-md px-3 py-2 text-left text-sm font-medium text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-900"
+            onClick={() => onSupportClick?.()}
           >
             Support
-          </a>
+          </button>
         ) : null}
       </nav>
     </aside>
@@ -98,6 +101,7 @@ export function MobileNav({
   projectName,
   logoUrl,
   supportEmail,
+  onSupportClick,
 }) {
   const links = variant === "admin" ? adminLinks : userLinks;
   const home = variant === "admin" ? "/admin/dashboard" : "/dashboard";
@@ -147,14 +151,17 @@ export function MobileNav({
               {l.label}
             </NavLink>
           ))}
-          {variant === "user" && supportEmail ? (
-            <a
-              href={`mailto:${supportEmail}`}
-              className="block rounded-md px-3 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-900"
-              onClick={onClose}
+          {supportEmail && (variant === "user" || variant === "admin") ? (
+            <button
+              type="button"
+              className="block w-full rounded-md px-3 py-2 text-left text-sm font-medium text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-900"
+              onClick={() => {
+                onClose();
+                onSupportClick?.();
+              }}
             >
               Support
-            </a>
+            </button>
           ) : null}
         </nav>
       </div>

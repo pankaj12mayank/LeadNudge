@@ -72,7 +72,12 @@ def list_followups(
     page = PaginationParams.clamp_page(page)
     limit = PaginationParams.clamp_limit(limit)
     rows, total = followup_service.list_followups(
-        db, workspace_id=wid, is_admin=principal.role == "admin", page=page, limit=limit
+        db,
+        workspace_id=wid,
+        is_admin=principal.role == "admin",
+        page=page,
+        limit=limit,
+        owner_user_id=principal.user_id if principal.role == "user" else None,
     )
     out: list[FollowupOut] = []
     for fu, last_msg, lead_name in rows:
@@ -122,6 +127,7 @@ def patch_followup(
         body,
         workspace_id=principal.workspace_id,
         is_admin=principal.role == "admin",
+        user_id=principal.user_id if principal.role == "user" else None,
     )
     return _followup_to_out(db, fu)
 
@@ -137,4 +143,5 @@ def delete_followup(
         followup_id,
         workspace_id=principal.workspace_id,
         is_admin=principal.role == "admin",
+        user_id=principal.user_id if principal.role == "user" else None,
     )

@@ -58,4 +58,5 @@ def sales_dashboard_summary(
         date_from=df,
         date_to=dt,
         status=st,
+        owner_user_id=principal.user_id,
     )

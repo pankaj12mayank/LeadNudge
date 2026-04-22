@@ -264,6 +264,10 @@ def create_followup(
     if not is_admin:
         if workspace_id is None or lead.workspace_id != workspace_id:
             raise HTTPException(status_code=404, detail="Lead not found")
+        if user_id is None or lead.owner_user_id is None:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        if int(lead.owner_user_id) != int(user_id):
+            raise HTTPException(status_code=404, detail="Lead not found")
         from services import usage_alerts_service
         from services.plan_access_service import validate_user_ai_scheduling
 
@@ -293,8 +297,11 @@ def create_followup(
             detail=_DUPLICATE_PENDING_MSG,
         )
 
-    ft = getattr(data, "followup_type", "normal") or "normal"
-    if ft not in ("normal", "recovery"):
+    if is_admin:
+        ft = getattr(data, "followup_type", "normal") or "normal"
+        if ft not in ("normal", "recovery"):
+            ft = "normal"
+    else:
         ft = "normal"
     fu = Followup(
         lead_id=data.lead_id,
@@ -325,7 +332,11 @@ def process_due_followups_batch(db: Session, *, batch_limit: int = 25) -> int:
     pending = (
         db.query(Followup)
         .join(Lead)
-        .filter(Followup.status == "pending", Followup.scheduled_at <= now)
+        .filter(
+            Followup.status == "pending",
+            Followup.scheduled_at <= now,
+            Followup.followup_type == "normal",
+        )
         .order_by(Followup.scheduled_at.asc(), Followup.id.asc())
         .limit(batch_limit)
         .all()
@@ -524,6 +535,7 @@ def patch_followup(
     *,
     workspace_id: int | None,
     is_admin: bool,
+    user_id: int | None = None,
 ) -> Followup:
     fu = db.get(Followup, followup_id)
     if not fu:
@@ -533,6 +545,10 @@ def patch_followup(
         raise HTTPException(status_code=404, detail="Follow-up not found")
     if not is_admin:
         if workspace_id is None or lead.workspace_id != workspace_id:
+            raise HTTPException(status_code=404, detail="Follow-up not found")
+        if user_id is None or lead.owner_user_id is None:
+            raise HTTPException(status_code=404, detail="Follow-up not found")
+        if int(lead.owner_user_id) != int(user_id):
             raise HTTPException(status_code=404, detail="Follow-up not found")
 
     if data.cancel:
@@ -592,6 +608,7 @@ def delete_followup_if_allowed(
     *,
     workspace_id: int | None,
     is_admin: bool,
+    user_id: int | None = None,
 ) -> None:
     fu = db.get(Followup, followup_id)
     if not fu:
@@ -602,6 +619,10 @@ def delete_followup_if_allowed(
     if not is_admin:
         if workspace_id is None or lead.workspace_id != workspace_id:
             raise HTTPException(status_code=404, detail="Follow-up not found")
+        if user_id is None or lead.owner_user_id is None:
+            raise HTTPException(status_code=404, detail="Follow-up not found")
+        if int(lead.owner_user_id) != int(user_id):
+            raise HTTPException(status_code=404, detail="Follow-up not found")
     if fu.status not in ("pending", "ai_failed", "draft_ready", "cancelled"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -611,6 +632,29 @@ def delete_followup_if_allowed(
     db.commit()
 
 
+def cancel_pending_recovery_followups(db: Session) -> int:
+    """Mark pending recovery-type rows cancelled (no longer sent by the scheduler)."""
+    n = (
+        db.query(Followup)
+        .filter(
+            Followup.status == "pending",
+            Followup.followup_type == "recovery",
+        )
+        .update(
+            {
+                Followup.status: "cancelled",
+                Followup.failure_reason: (
+                    "Automatic recovery follow-ups are disabled. "
+                    "Schedule a follow-up from the portal when you want mail sent."
+                ),
+            },
+            synchronize_session=False,
+        )
+    )
+    db.commit()
+    return int(n or 0)
+
+
 def list_followups(
     db: Session,
     *,
@@ -618,15 +662,19 @@ def list_followups(
     is_admin: bool,
     page: int,
     limit: int,
+    owner_user_id: int | None = None,
 ) -> tuple[list[tuple[Followup, str | None, str | None]], int]:
     q = db.query(Followup).join(Lead)
     if is_admin:
         if workspace_id is not None:
             q = q.filter(Lead.workspace_id == workspace_id)
     else:
-        if workspace_id is None:
+        if workspace_id is None or owner_user_id is None:
             return [], 0
-        q = q.filter(Lead.workspace_id == workspace_id)
+        q = q.filter(
+            Lead.workspace_id == workspace_id,
+            Lead.owner_user_id == owner_user_id,
+        )
     total = q.count()
     page = PaginationParams.clamp_page(page)
     limit = PaginationParams.clamp_limit(limit)

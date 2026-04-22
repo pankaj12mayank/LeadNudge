@@ -19,6 +19,7 @@ import AISettings from "./pages/admin/AISettings";
 import Usage from "./pages/admin/Usage";
 import UsageHistory from "./pages/admin/UsageHistory";
 import AdminLogs from "./pages/admin/AdminLogs";
+import AdminLeads from "./pages/admin/AdminLeads";
 import PasswordRequests from "./pages/admin/PasswordRequests";
 import EmailTemplates from "./pages/admin/EmailTemplates";
 import EmailTemplateCreate from "./pages/admin/EmailTemplateCreate";
@@ -31,11 +32,13 @@ import SentMails from "./pages/user/SentMails";
 import EmailSettings from "./pages/user/EmailSettings";
 import Profile from "./pages/user/Profile";
 import FollowupReminderListener from "./components/FollowupReminderListener";
+import SupportEmailDialog from "./components/SupportEmailDialog";
 import UsageLimitBanner from "./components/UsageLimitBanner";
 
 /** Short labels for the top header (each page hero title is different, set in the page). */
 const NAV_TITLES = {
   "/admin/dashboard": "Overview",
+  "/admin/leads": "All leads",
   "/admin/workspaces": "Workspaces",
   "/admin/users": "Team",
   "/admin/password-requests": "Password requests",
@@ -72,6 +75,7 @@ function Shell({ variant }) {
   const { site } = useSite();
   const navTitle = headerTitle(pathname, variant);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
 
   const projectName = site?.project_name;
   const logoUrl = site?.logo_url;
@@ -80,11 +84,17 @@ function Shell({ variant }) {
   return (
     <div className="flex min-h-screen w-full bg-neutral-50 dark:bg-black">
       {variant === "user" ? <FollowupReminderListener /> : null}
+      <SupportEmailDialog
+        open={supportOpen}
+        onClose={() => setSupportOpen(false)}
+        email={supportEmail}
+      />
       <Sidebar
         variant={variant}
         projectName={projectName}
         logoUrl={logoUrl}
         supportEmail={supportEmail}
+        onSupportClick={() => setSupportOpen(true)}
       />
       <MobileNav
         variant={variant}
@@ -93,6 +103,7 @@ function Shell({ variant }) {
         projectName={projectName}
         logoUrl={logoUrl}
         supportEmail={supportEmail}
+        onSupportClick={() => setSupportOpen(true)}
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-2 border-b border-neutral-200 bg-white px-2 dark:border-neutral-800 dark:bg-neutral-950 lg:hidden">
@@ -135,6 +146,7 @@ export default function App() {
       <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
         <Route element={<Shell variant="admin" />}>
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          <Route path="/admin/leads" element={<AdminLeads />} />
           <Route path="/admin/workspaces" element={<Workspaces />} />
           <Route path="/admin/users" element={<Users />} />
           <Route path="/admin/password-requests" element={<PasswordRequests />} />

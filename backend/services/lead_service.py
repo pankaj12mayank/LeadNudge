@@ -78,6 +78,16 @@ def _get_lead_in_workspace(db: Session, lead_id: int, workspace_id: int) -> Lead
     return lead
 
 
+def _get_lead_for_portal_user(
+    db: Session, lead_id: int, workspace_id: int, user_id: int
+) -> Lead:
+    """Workspace user may only access leads they own (owner_user_id must match)."""
+    lead = _get_lead_in_workspace(db, lead_id, workspace_id)
+    if lead.owner_user_id is None or int(lead.owner_user_id) != int(user_id):
+        raise HTTPException(status_code=404, detail="Lead not found")
+    return lead
+
+
 def list_leads(
     db: Session,
     *,
@@ -87,15 +97,19 @@ def list_leads(
     limit: int,
     search: str | None = None,
     status: str | None = None,
+    owner_user_id: int | None = None,
 ) -> tuple[list[Lead], int]:
     q = db.query(Lead)
     if is_admin:
         if workspace_id is not None:
             q = q.filter(Lead.workspace_id == workspace_id)
     else:
-        if workspace_id is None:
+        if workspace_id is None or owner_user_id is None:
             return [], 0
-        q = q.filter(Lead.workspace_id == workspace_id)
+        q = q.filter(
+            Lead.workspace_id == workspace_id,
+            Lead.owner_user_id == owner_user_id,
+        )
     if status and str(status).strip():
         q = q.filter(Lead.status == str(status).strip().lower())
     if search and search.strip():
@@ -111,7 +125,13 @@ def list_leads(
     return items, total
 
 
-def create_lead(db: Session, workspace_id: int, data: LeadCreate) -> Lead:
+def create_lead(
+    db: Session,
+    workspace_id: int,
+    data: LeadCreate,
+    *,
+    owner_user_id: int | None = None,
+) -> Lead:
     lm = (data.last_message or "").strip() or None
     co = (data.company or "").strip() or None
     lead = Lead(
@@ -125,6 +145,7 @@ def create_lead(db: Session, workspace_id: int, data: LeadCreate) -> Lead:
         last_message=lm,
         workspace_id=workspace_id,
         temperature_tag="hot",
+        owner_user_id=owner_user_id,
     )
     db.add(lead)
     db.commit()
@@ -139,14 +160,15 @@ def update_lead(
     *,
     workspace_id: int | None,
     is_admin: bool,
+    user_id: int | None = None,
 ) -> Lead:
     if is_admin:
         lead = db.get(Lead, lead_id)
         if not lead:
             raise HTTPException(status_code=404, detail="Lead not found")
     else:
-        assert workspace_id is not None
-        lead = _get_lead_in_workspace(db, lead_id, workspace_id)
+        assert workspace_id is not None and user_id is not None
+        lead = _get_lead_for_portal_user(db, lead_id, workspace_id, user_id)
     if data.name is not None:
         lead.name = data.name
     if data.email is not None:
@@ -176,14 +198,15 @@ def delete_lead(
     *,
     workspace_id: int | None,
     is_admin: bool,
+    user_id: int | None = None,
 ) -> None:
     if is_admin:
         lead = db.get(Lead, lead_id)
         if not lead:
             raise HTTPException(status_code=404, detail="Lead not found")
     else:
-        assert workspace_id is not None
-        lead = _get_lead_in_workspace(db, lead_id, workspace_id)
+        assert workspace_id is not None and user_id is not None
+        lead = _get_lead_for_portal_user(db, lead_id, workspace_id, user_id)
     db.delete(lead)
     db.commit()
 
@@ -194,6 +217,7 @@ def delete_leads_batch(
     *,
     workspace_id: int | None,
     is_admin: bool,
+    user_id: int | None = None,
 ) -> int:
     """Delete up to 500 leads; workspace users only their workspace. ORM delete for cascades."""
     clean = sorted({i for i in ids if isinstance(i, int) and i > 0})[:500]
@@ -201,9 +225,12 @@ def delete_leads_batch(
         return 0
     q = db.query(Lead).filter(Lead.id.in_(clean))
     if not is_admin:
-        if workspace_id is None:
+        if workspace_id is None or user_id is None:
             return 0
-        q = q.filter(Lead.workspace_id == workspace_id)
+        q = q.filter(
+            Lead.workspace_id == workspace_id,
+            Lead.owner_user_id == user_id,
+        )
     rows = q.all()
     for lead in rows:
         db.delete(lead)
@@ -217,6 +244,7 @@ def import_leads_from_csv(
     file: BinaryIO,
     *,
     max_rows: int = 2000,
+    owner_user_id: int | None = None,
 ) -> LeadCsvImportResult:
     raw = file.read()
     try:
@@ -328,6 +356,7 @@ def import_leads_from_csv(
                 last_message=last_m,
                 workspace_id=workspace_id,
                 temperature_tag="hot",
+                owner_user_id=owner_user_id,
             )
         )
         imported_emails.append(email_raw)

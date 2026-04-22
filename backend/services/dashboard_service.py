@@ -28,8 +28,11 @@ def get_sales_dashboard(
     date_from: date | None = None,
     date_to: date | None = None,
     status: str | None = None,
+    owner_user_id: int | None = None,
 ) -> SalesDashboardOut:
     q_leads = db.query(Lead).filter(Lead.workspace_id == workspace_id)
+    if owner_user_id is not None:
+        q_leads = q_leads.filter(Lead.owner_user_id == owner_user_id)
     st = (status or "").strip().lower()
     if st:
         q_leads = q_leads.filter(Lead.status == st)
@@ -46,6 +49,8 @@ def get_sales_dashboard(
         .join(Lead, Followup.lead_id == Lead.id)
         .filter(Lead.workspace_id == workspace_id, Followup.status == "sent")
     )
+    if owner_user_id is not None:
+        fq = fq.filter(Lead.owner_user_id == owner_user_id)
     if date_from is not None:
         fq = fq.filter(Followup.sent_at >= _day_start_utc(date_from))
     if date_to is not None:
@@ -67,6 +72,8 @@ def get_sales_dashboard(
         .join(Lead, Followup.lead_id == Lead.id)
         .filter(Lead.workspace_id == workspace_id)
     )
+    if owner_user_id is not None:
+        recent_fu_q = recent_fu_q.filter(Lead.owner_user_id == owner_user_id)
     if date_from is not None:
         recent_fu_q = recent_fu_q.filter(
             Followup.scheduled_at >= _day_start_utc(date_from)

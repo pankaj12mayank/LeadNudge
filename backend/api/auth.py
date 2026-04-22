@@ -11,7 +11,6 @@ from models.workspace import Workspace
 from services import admin_account_service, auth_service
 from services import password_request_service
 from services import user_profile_service
-from services.plan_expiry_notify_service import maybe_send_plan_expired_emails
 from services.plan_access_service import (
     portal_shows_plan_expired_notice,
     user_ai_quota_exhausted,
@@ -66,7 +65,6 @@ def auth_me(
         )
     u = user_profile_service.get_user(db, principal.user_id)
     auth_service.assert_user_portal_access(db, u)
-    maybe_send_plan_expired_emails(db, u.workspace_id)
     ws = db.get(Workspace, u.workspace_id)
     wpt = (ws.plan_type or "free").lower() if ws else "free"
     wid = u.workspace_id

@@ -91,6 +91,7 @@ class LeadOut(BaseModel):
     temperature_tag: str | None = None
     last_message: str | None = None
     workspace_id: int
+    owner_user_id: int | None = None
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}

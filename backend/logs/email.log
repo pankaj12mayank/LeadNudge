@@ -235,3 +235,549 @@ smtplib.SMTPServerDisconnected: Connection unexpectedly closed: The read operati
 2026-04-12 14:25:25,961 INFO ais.email_file followup_email sent host=smtp.gmail.com to=lokesh49@gmail.com
 2026-04-12 14:31:33,262 INFO ais.email_file followup_email sent host=smtp.gmail.com to=bhavna50@gmail.com
 2026-04-12 14:48:01,434 INFO ais.email_file transactional_email sent host=smtp.gmail.com to=Saumyasakwar9780@gmail.com
+2026-04-16 00:24:57,313 ERROR ais.email_file transactional_email FAILED host=smtp.gmail.com port=587 to=admin@gmail.com
+Traceback (most recent call last):
+  File "C:\Python314\Lib\smtplib.py", line 405, in getreply
+    line = self.file.readline(_MAXLINE + 1)
+  File "C:\Python314\Lib\socket.py", line 725, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python314\Lib\ssl.py", line 1304, in recv_into
+    return self.read(nbytes, buffer)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\ssl.py", line 1138, in read
+    return self._sslobj.read(len, buffer)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+TimeoutError: The read operation timed out
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Py_Projects\LeadNudge\backend\services\transactional_mail.py", line 79, in send_plain_email
+    smtp.send_message(msg)
+    ~~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 987, in send_message
+    return self.sendmail(from_addr, to_addrs, flatmsg, mail_options,
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                         rcpt_options)
+                         ^^^^^^^^^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 903, in sendmail
+    (code, resp) = self.data(msg)
+                   ~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 587, in data
+    (code, msg) = self.getreply()
+                  ~~~~~~~~~~~~~^^
+  File "C:\Python314\Lib\smtplib.py", line 408, in getreply
+    raise SMTPServerDisconnected("Connection unexpectedly closed: "
+                                 + str(e))
+smtplib.SMTPServerDisconnected: Connection unexpectedly closed: The read operation timed out
+2026-04-16 00:27:08,101 INFO ais.email_file transactional_email sent host=smtp.gmail.com to=dante12mk@gmail.com
+2026-04-16 00:27:20,242 ERROR ais.email_file transactional_email FAILED host=smtp.gmail.com port=587 to=Saumyasakwar9780@gmail.com
+Traceback (most recent call last):
+  File "C:\Python314\Lib\smtplib.py", line 405, in getreply
+    line = self.file.readline(_MAXLINE + 1)
+  File "C:\Python314\Lib\socket.py", line 725, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python314\Lib\ssl.py", line 1304, in recv_into
+    return self.read(nbytes, buffer)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\ssl.py", line 1138, in read
+    return self._sslobj.read(len, buffer)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+TimeoutError: The read operation timed out
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Py_Projects\LeadNudge\backend\services\transactional_mail.py", line 79, in send_plain_email
+    smtp.send_message(msg)
+    ~~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 987, in send_message
+    return self.sendmail(from_addr, to_addrs, flatmsg, mail_options,
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                         rcpt_options)
+                         ^^^^^^^^^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 903, in sendmail
+    (code, resp) = self.data(msg)
+                   ~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 587, in data
+    (code, msg) = self.getreply()
+                  ~~~~~~~~~~~~~^^
+  File "C:\Python314\Lib\smtplib.py", line 408, in getreply
+    raise SMTPServerDisconnected("Connection unexpectedly closed: "
+                                 + str(e))
+smtplib.SMTPServerDisconnected: Connection unexpectedly closed: The read operation timed out
+2026-04-16 00:27:51,215 ERROR ais.email_file transactional_email FAILED host=smtp.gmail.com port=587 to=test@gmail.com
+Traceback (most recent call last):
+  File "C:\Python314\Lib\smtplib.py", line 405, in getreply
+    line = self.file.readline(_MAXLINE + 1)
+  File "C:\Python314\Lib\socket.py", line 725, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python314\Lib\ssl.py", line 1304, in recv_into
+    return self.read(nbytes, buffer)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\ssl.py", line 1138, in read
+    return self._sslobj.read(len, buffer)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+TimeoutError: The read operation timed out
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Py_Projects\LeadNudge\backend\services\transactional_mail.py", line 79, in send_plain_email
+    smtp.send_message(msg)
+    ~~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 987, in send_message
+    return self.sendmail(from_addr, to_addrs, flatmsg, mail_options,
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                         rcpt_options)
+                         ^^^^^^^^^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 903, in sendmail
+    (code, resp) = self.data(msg)
+                   ~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 587, in data
+    (code, msg) = self.getreply()
+                  ~~~~~~~~~~~~~^^
+  File "C:\Python314\Lib\smtplib.py", line 408, in getreply
+    raise SMTPServerDisconnected("Connection unexpectedly closed: "
+                                 + str(e))
+smtplib.SMTPServerDisconnected: Connection unexpectedly closed: The read operation timed out
+2026-04-22 13:30:39,724 INFO ais.email_file followup_email sent host=smtp.gmail.com to=test@testmail.com
+2026-04-22 13:30:50,390 INFO ais.email_file followup_email sent host=smtp.gmail.com to=Somya@gmail.com
+2026-04-22 13:31:29,698 ERROR ais.email_file followup_email FAILED host=smtp.gmail.com port=587 to=dante12mk@gmail.com
+Traceback (most recent call last):
+  File "C:\Python314\Lib\smtplib.py", line 405, in getreply
+    line = self.file.readline(_MAXLINE + 1)
+  File "C:\Python314\Lib\socket.py", line 725, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python314\Lib\ssl.py", line 1304, in recv_into
+    return self.read(nbytes, buffer)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\ssl.py", line 1138, in read
+    return self._sslobj.read(len, buffer)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+TimeoutError: The read operation timed out
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Py_Projects\LeadNudge\backend\services\email_service.py", line 238, in send_followup_email
+    smtp.send_message(msg)
+    ~~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 987, in send_message
+    return self.sendmail(from_addr, to_addrs, flatmsg, mail_options,
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                         rcpt_options)
+                         ^^^^^^^^^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 903, in sendmail
+    (code, resp) = self.data(msg)
+                   ~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 587, in data
+    (code, msg) = self.getreply()
+                  ~~~~~~~~~~~~~^^
+  File "C:\Python314\Lib\smtplib.py", line 408, in getreply
+    raise SMTPServerDisconnected("Connection unexpectedly closed: "
+                                 + str(e))
+smtplib.SMTPServerDisconnected: Connection unexpectedly closed: The read operation timed out
+2026-04-22 13:31:46,049 INFO ais.email_file followup_email sent host=smtp.gmail.com to=test@gmail.com
+2026-04-22 13:31:57,567 INFO ais.email_file followup_email sent host=smtp.gmail.com to=rahul1@gmail.com
+2026-04-22 13:32:07,389 INFO ais.email_file followup_email sent host=smtp.gmail.com to=priya2@gmail.com
+2026-04-22 13:32:17,536 INFO ais.email_file followup_email sent host=smtp.gmail.com to=amit3@gmail.com
+2026-04-22 13:32:45,950 INFO ais.email_file followup_email sent host=smtp.gmail.com to=neha4@gmail.com
+2026-04-22 13:33:24,769 ERROR ais.email_file followup_email FAILED host=smtp.gmail.com port=587 to=rohit5@gmail.com
+Traceback (most recent call last):
+  File "C:\Python314\Lib\smtplib.py", line 405, in getreply
+    line = self.file.readline(_MAXLINE + 1)
+  File "C:\Python314\Lib\socket.py", line 725, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python314\Lib\ssl.py", line 1304, in recv_into
+    return self.read(nbytes, buffer)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\ssl.py", line 1138, in read
+    return self._sslobj.read(len, buffer)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+TimeoutError: The read operation timed out
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Py_Projects\LeadNudge\backend\services\email_service.py", line 238, in send_followup_email
+    smtp.send_message(msg)
+    ~~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 987, in send_message
+    return self.sendmail(from_addr, to_addrs, flatmsg, mail_options,
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                         rcpt_options)
+                         ^^^^^^^^^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 903, in sendmail
+    (code, resp) = self.data(msg)
+                   ~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 587, in data
+    (code, msg) = self.getreply()
+                  ~~~~~~~~~~~~~^^
+  File "C:\Python314\Lib\smtplib.py", line 408, in getreply
+    raise SMTPServerDisconnected("Connection unexpectedly closed: "
+                                 + str(e))
+smtplib.SMTPServerDisconnected: Connection unexpectedly closed: The read operation timed out
+2026-04-22 13:34:09,289 ERROR ais.email_file followup_email FAILED host=smtp.gmail.com port=587 to=anjali6@gmail.com
+Traceback (most recent call last):
+  File "C:\Python314\Lib\smtplib.py", line 405, in getreply
+    line = self.file.readline(_MAXLINE + 1)
+  File "C:\Python314\Lib\socket.py", line 725, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python314\Lib\ssl.py", line 1304, in recv_into
+    return self.read(nbytes, buffer)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\ssl.py", line 1138, in read
+    return self._sslobj.read(len, buffer)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+TimeoutError: The read operation timed out
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Py_Projects\LeadNudge\backend\services\email_service.py", line 238, in send_followup_email
+    smtp.send_message(msg)
+    ~~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 987, in send_message
+    return self.sendmail(from_addr, to_addrs, flatmsg, mail_options,
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                         rcpt_options)
+                         ^^^^^^^^^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 903, in sendmail
+    (code, resp) = self.data(msg)
+                   ~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 587, in data
+    (code, msg) = self.getreply()
+                  ~~~~~~~~~~~~~^^
+  File "C:\Python314\Lib\smtplib.py", line 408, in getreply
+    raise SMTPServerDisconnected("Connection unexpectedly closed: "
+                                 + str(e))
+smtplib.SMTPServerDisconnected: Connection unexpectedly closed: The read operation timed out
+2026-04-22 13:34:24,929 INFO ais.email_file followup_email sent host=smtp.gmail.com to=vikas7@gmail.com
+2026-04-22 13:34:35,865 INFO ais.email_file followup_email sent host=smtp.gmail.com to=karan11@gmail.com
+2026-04-22 13:34:50,103 INFO ais.email_file followup_email sent host=smtp.gmail.com to=simran12@gmail.com
+2026-04-22 13:35:09,078 INFO ais.email_file followup_email sent host=smtp.gmail.com to=manish13@gmail.com
+2026-04-22 13:36:05,267 INFO ais.email_file followup_email sent host=smtp.gmail.com to=manish13@gmail.com
+2026-04-22 13:36:25,154 INFO ais.email_file followup_email sent host=smtp.gmail.com to=ritika14@gmail.com
+2026-04-22 13:37:05,165 ERROR ais.email_file followup_email FAILED host=smtp.gmail.com port=587 to=deepak15@gmail.com
+Traceback (most recent call last):
+  File "C:\Python314\Lib\smtplib.py", line 405, in getreply
+    line = self.file.readline(_MAXLINE + 1)
+  File "C:\Python314\Lib\socket.py", line 725, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python314\Lib\ssl.py", line 1304, in recv_into
+    return self.read(nbytes, buffer)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\ssl.py", line 1138, in read
+    return self._sslobj.read(len, buffer)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+TimeoutError: The read operation timed out
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Py_Projects\LeadNudge\backend\services\email_service.py", line 238, in send_followup_email
+    smtp.send_message(msg)
+    ~~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 987, in send_message
+    return self.sendmail(from_addr, to_addrs, flatmsg, mail_options,
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                         rcpt_options)
+                         ^^^^^^^^^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 903, in sendmail
+    (code, resp) = self.data(msg)
+                   ~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 587, in data
+    (code, msg) = self.getreply()
+                  ~~~~~~~~~~~~~^^
+  File "C:\Python314\Lib\smtplib.py", line 408, in getreply
+    raise SMTPServerDisconnected("Connection unexpectedly closed: "
+                                 + str(e))
+smtplib.SMTPServerDisconnected: Connection unexpectedly closed: The read operation timed out
+2026-04-22 13:37:29,524 INFO ais.email_file followup_email sent host=smtp.gmail.com to=nidhi16@gmail.com
+2026-04-22 13:38:08,723 ERROR ais.email_file followup_email FAILED host=smtp.gmail.com port=587 to=suresh17@gmail.com
+Traceback (most recent call last):
+  File "C:\Python314\Lib\smtplib.py", line 405, in getreply
+    line = self.file.readline(_MAXLINE + 1)
+  File "C:\Python314\Lib\socket.py", line 725, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python314\Lib\ssl.py", line 1304, in recv_into
+    return self.read(nbytes, buffer)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\ssl.py", line 1138, in read
+    return self._sslobj.read(len, buffer)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+TimeoutError: The read operation timed out
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Py_Projects\LeadNudge\backend\services\email_service.py", line 238, in send_followup_email
+    smtp.send_message(msg)
+    ~~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 987, in send_message
+    return self.sendmail(from_addr, to_addrs, flatmsg, mail_options,
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                         rcpt_options)
+                         ^^^^^^^^^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 903, in sendmail
+    (code, resp) = self.data(msg)
+                   ~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 587, in data
+    (code, msg) = self.getreply()
+                  ~~~~~~~~~~~~~^^
+  File "C:\Python314\Lib\smtplib.py", line 408, in getreply
+    raise SMTPServerDisconnected("Connection unexpectedly closed: "
+                                 + str(e))
+smtplib.SMTPServerDisconnected: Connection unexpectedly closed: The read operation timed out
+2026-04-22 13:38:53,482 ERROR ais.email_file followup_email FAILED host=smtp.gmail.com port=587 to=meena18@gmail.com
+Traceback (most recent call last):
+  File "C:\Python314\Lib\smtplib.py", line 405, in getreply
+    line = self.file.readline(_MAXLINE + 1)
+  File "C:\Python314\Lib\socket.py", line 725, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python314\Lib\ssl.py", line 1304, in recv_into
+    return self.read(nbytes, buffer)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\ssl.py", line 1138, in read
+    return self._sslobj.read(len, buffer)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+TimeoutError: The read operation timed out
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Py_Projects\LeadNudge\backend\services\email_service.py", line 238, in send_followup_email
+    smtp.send_message(msg)
+    ~~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 987, in send_message
+    return self.sendmail(from_addr, to_addrs, flatmsg, mail_options,
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                         rcpt_options)
+                         ^^^^^^^^^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 903, in sendmail
+    (code, resp) = self.data(msg)
+                   ~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 587, in data
+    (code, msg) = self.getreply()
+                  ~~~~~~~~~~~~~^^
+  File "C:\Python314\Lib\smtplib.py", line 408, in getreply
+    raise SMTPServerDisconnected("Connection unexpectedly closed: "
+                                 + str(e))
+smtplib.SMTPServerDisconnected: Connection unexpectedly closed: The read operation timed out
+2026-04-22 13:39:37,877 ERROR ais.email_file followup_email FAILED host=smtp.gmail.com port=587 to=ankit19@gmail.com
+Traceback (most recent call last):
+  File "C:\Python314\Lib\smtplib.py", line 405, in getreply
+    line = self.file.readline(_MAXLINE + 1)
+  File "C:\Python314\Lib\socket.py", line 725, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python314\Lib\ssl.py", line 1304, in recv_into
+    return self.read(nbytes, buffer)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\ssl.py", line 1138, in read
+    return self._sslobj.read(len, buffer)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+TimeoutError: The read operation timed out
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Py_Projects\LeadNudge\backend\services\email_service.py", line 238, in send_followup_email
+    smtp.send_message(msg)
+    ~~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 987, in send_message
+    return self.sendmail(from_addr, to_addrs, flatmsg, mail_options,
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                         rcpt_options)
+                         ^^^^^^^^^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 903, in sendmail
+    (code, resp) = self.data(msg)
+                   ~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 587, in data
+    (code, msg) = self.getreply()
+                  ~~~~~~~~~~~~~^^
+  File "C:\Python314\Lib\smtplib.py", line 408, in getreply
+    raise SMTPServerDisconnected("Connection unexpectedly closed: "
+                                 + str(e))
+smtplib.SMTPServerDisconnected: Connection unexpectedly closed: The read operation timed out
+2026-04-22 13:39:54,241 INFO ais.email_file followup_email sent host=smtp.gmail.com to=tanya20@gmail.com
+2026-04-22 13:40:05,074 INFO ais.email_file followup_email sent host=smtp.gmail.com to=ramesh21@gmail.com
+2026-04-22 13:40:43,817 ERROR ais.email_file followup_email FAILED host=smtp.gmail.com port=587 to=kavita22@gmail.com
+Traceback (most recent call last):
+  File "C:\Python314\Lib\smtplib.py", line 405, in getreply
+    line = self.file.readline(_MAXLINE + 1)
+  File "C:\Python314\Lib\socket.py", line 725, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python314\Lib\ssl.py", line 1304, in recv_into
+    return self.read(nbytes, buffer)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\ssl.py", line 1138, in read
+    return self._sslobj.read(len, buffer)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+TimeoutError: The read operation timed out
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Py_Projects\LeadNudge\backend\services\email_service.py", line 238, in send_followup_email
+    smtp.send_message(msg)
+    ~~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 987, in send_message
+    return self.sendmail(from_addr, to_addrs, flatmsg, mail_options,
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                         rcpt_options)
+                         ^^^^^^^^^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 903, in sendmail
+    (code, resp) = self.data(msg)
+                   ~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 587, in data
+    (code, msg) = self.getreply()
+                  ~~~~~~~~~~~~~^^
+  File "C:\Python314\Lib\smtplib.py", line 408, in getreply
+    raise SMTPServerDisconnected("Connection unexpectedly closed: "
+                                 + str(e))
+smtplib.SMTPServerDisconnected: Connection unexpectedly closed: The read operation timed out
+2026-04-22 13:40:59,631 INFO ais.email_file followup_email sent host=smtp.gmail.com to=mohit23@gmail.com
+2026-04-22 13:41:10,042 INFO ais.email_file followup_email sent host=smtp.gmail.com to=shalini24@gmail.com
+2026-04-22 13:41:48,721 ERROR ais.email_file followup_email FAILED host=smtp.gmail.com port=587 to=varun25@gmail.com
+Traceback (most recent call last):
+  File "C:\Python314\Lib\smtplib.py", line 405, in getreply
+    line = self.file.readline(_MAXLINE + 1)
+  File "C:\Python314\Lib\socket.py", line 725, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python314\Lib\ssl.py", line 1304, in recv_into
+    return self.read(nbytes, buffer)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\ssl.py", line 1138, in read
+    return self._sslobj.read(len, buffer)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+TimeoutError: The read operation timed out
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Py_Projects\LeadNudge\backend\services\email_service.py", line 238, in send_followup_email
+    smtp.send_message(msg)
+    ~~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 987, in send_message
+    return self.sendmail(from_addr, to_addrs, flatmsg, mail_options,
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                         rcpt_options)
+                         ^^^^^^^^^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 903, in sendmail
+    (code, resp) = self.data(msg)
+                   ~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 587, in data
+    (code, msg) = self.getreply()
+                  ~~~~~~~~~~~~~^^
+  File "C:\Python314\Lib\smtplib.py", line 408, in getreply
+    raise SMTPServerDisconnected("Connection unexpectedly closed: "
+                                 + str(e))
+smtplib.SMTPServerDisconnected: Connection unexpectedly closed: The read operation timed out
+2026-04-22 13:42:23,730 INFO ais.email_file followup_email sent host=smtp.gmail.com to=komal26@gmail.com
+2026-04-22 13:43:02,543 ERROR ais.email_file followup_email FAILED host=smtp.gmail.com port=587 to=rajesh27@gmail.com
+Traceback (most recent call last):
+  File "C:\Python314\Lib\smtplib.py", line 405, in getreply
+    line = self.file.readline(_MAXLINE + 1)
+  File "C:\Python314\Lib\socket.py", line 725, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python314\Lib\ssl.py", line 1304, in recv_into
+    return self.read(nbytes, buffer)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\ssl.py", line 1138, in read
+    return self._sslobj.read(len, buffer)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+TimeoutError: The read operation timed out
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Py_Projects\LeadNudge\backend\services\email_service.py", line 238, in send_followup_email
+    smtp.send_message(msg)
+    ~~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 987, in send_message
+    return self.sendmail(from_addr, to_addrs, flatmsg, mail_options,
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                         rcpt_options)
+                         ^^^^^^^^^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 903, in sendmail
+    (code, resp) = self.data(msg)
+                   ~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 587, in data
+    (code, msg) = self.getreply()
+                  ~~~~~~~~~~~~~^^
+  File "C:\Python314\Lib\smtplib.py", line 408, in getreply
+    raise SMTPServerDisconnected("Connection unexpectedly closed: "
+                                 + str(e))
+smtplib.SMTPServerDisconnected: Connection unexpectedly closed: The read operation timed out
+2026-04-22 13:43:23,084 INFO ais.email_file followup_email sent host=smtp.gmail.com to=payal28@gmail.com
+2026-04-22 13:43:42,004 INFO ais.email_file followup_email sent host=smtp.gmail.com to=abhishek29@gmail.com
+2026-04-22 13:44:37,368 INFO ais.email_file followup_email sent host=smtp.gmail.com to=sakshi30@gmail.com
+2026-04-22 13:44:53,159 INFO ais.email_file followup_email sent host=smtp.gmail.com to=naveen31@gmail.com
+2026-04-22 13:45:12,172 INFO ais.email_file followup_email sent host=smtp.gmail.com to=geeta32@gmail.com
+2026-04-22 13:45:28,341 INFO ais.email_file followup_email sent host=smtp.gmail.com to=tarun33@gmail.com
+2026-04-22 13:45:43,804 INFO ais.email_file followup_email sent host=smtp.gmail.com to=divya34@gmail.com
+2026-04-22 13:45:58,222 INFO ais.email_file followup_email sent host=smtp.gmail.com to=ashish35@gmail.com
+2026-04-22 13:46:14,178 INFO ais.email_file followup_email sent host=smtp.gmail.com to=rekha36@gmail.com
+2026-04-22 13:46:27,926 INFO ais.email_file followup_email sent host=smtp.gmail.com to=prakash37@gmail.com
+2026-04-22 13:47:29,843 INFO ais.email_file followup_email sent host=smtp.gmail.com to=seema38@gmail.com
+2026-04-22 13:47:45,259 INFO ais.email_file followup_email sent host=smtp.gmail.com to=gaurav39@gmail.com
+2026-04-22 13:47:55,442 INFO ais.email_file followup_email sent host=smtp.gmail.com to=pallavi40@gmail.com
+2026-04-22 13:48:08,915 INFO ais.email_file followup_email sent host=smtp.gmail.com to=yash41@gmail.com
+2026-04-22 13:48:20,057 INFO ais.email_file followup_email sent host=smtp.gmail.com to=isha42@gmail.com
+2026-04-22 13:48:33,077 INFO ais.email_file followup_email sent host=smtp.gmail.com to=harsh43@gmail.com
+2026-04-22 13:48:45,350 INFO ais.email_file followup_email sent host=smtp.gmail.com to=ruchi44@gmail.com
+2026-04-22 13:48:55,602 INFO ais.email_file followup_email sent host=smtp.gmail.com to=aditya45@gmail.com
+2026-04-22 13:49:05,852 INFO ais.email_file followup_email sent host=smtp.gmail.com to=kirti46@gmail.com
+2026-04-22 13:49:16,844 INFO ais.email_file followup_email sent host=smtp.gmail.com to=nitin47@gmail.com
+2026-04-22 13:49:56,058 ERROR ais.email_file followup_email FAILED host=smtp.gmail.com port=587 to=aarti48@gmail.com
+Traceback (most recent call last):
+  File "C:\Python314\Lib\smtplib.py", line 405, in getreply
+    line = self.file.readline(_MAXLINE + 1)
+  File "C:\Python314\Lib\socket.py", line 725, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python314\Lib\ssl.py", line 1304, in recv_into
+    return self.read(nbytes, buffer)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\ssl.py", line 1138, in read
+    return self._sslobj.read(len, buffer)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+TimeoutError: The read operation timed out
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Py_Projects\LeadNudge\backend\services\email_service.py", line 238, in send_followup_email
+    smtp.send_message(msg)
+    ~~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 987, in send_message
+    return self.sendmail(from_addr, to_addrs, flatmsg, mail_options,
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                         rcpt_options)
+                         ^^^^^^^^^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 903, in sendmail
+    (code, resp) = self.data(msg)
+                   ~~~~~~~~~^^^^^
+  File "C:\Python314\Lib\smtplib.py", line 587, in data
+    (code, msg) = self.getreply()
+                  ~~~~~~~~~~~~~^^
+  File "C:\Python314\Lib\smtplib.py", line 408, in getreply
+    raise SMTPServerDisconnected("Connection unexpectedly closed: "
+                                 + str(e))
+smtplib.SMTPServerDisconnected: Connection unexpectedly closed: The read operation timed out
+2026-04-22 13:50:12,108 INFO ais.email_file followup_email sent host=smtp.gmail.com to=lokesh49@gmail.com
+2026-04-22 13:50:22,525 INFO ais.email_file followup_email sent host=smtp.gmail.com to=bhavna50@gmail.com

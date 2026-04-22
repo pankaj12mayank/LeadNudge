@@ -1,0 +1,206 @@
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import Card from "../../components/Card";
+import Table from "../../components/Table";
+import Badge from "../../components/Badge";
+import PaginationBar from "../../components/PaginationBar";
+import * as adminService from "../../services/adminService";
+import * as userService from "../../services/userService";
+import { workspaceLabel } from "../../utils/workspaceLabel";
+
+export default function AdminLeads() {
+  const [page, setPage] = useState(1);
+  const limit = 25;
+  const [rows, setRows] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [pages, setPages] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [listLoading, setListLoading] = useState(false);
+  const [workspaces, setWorkspaces] = useState([]);
+  const [workspaceFilter, setWorkspaceFilter] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQ, setSearchQ] = useState("");
+
+  const wsById = useMemo(() => {
+    const m = {};
+    (workspaces || []).forEach((w) => {
+      m[w.id] = w;
+    });
+    return m;
+  }, [workspaces]);
+
+  useEffect(() => {
+    let c = false;
+    adminService
+      .listWorkspaces()
+      .then((data) => {
+        if (!c) setWorkspaces(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!c) setWorkspaces([]);
+      });
+    return () => {
+      c = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let c = false;
+    (async () => {
+      setListLoading(true);
+      try {
+        const wid =
+          workspaceFilter === "" ? undefined : Number(workspaceFilter);
+        const data = await userService.listLeads(wid, {
+          page,
+          limit,
+          q: searchQ || undefined,
+        });
+        if (!c) {
+          setRows(data.items ?? []);
+          setTotal(data.total ?? 0);
+          setPages(data.pages ?? 1);
+        }
+      } catch (e) {
+        if (!c) toast.error(e.message);
+      } finally {
+        if (!c) {
+          setListLoading(false);
+          setLoading(false);
+        }
+      }
+    })();
+    return () => {
+      c = true;
+    };
+  }, [page, limit, workspaceFilter, searchQ]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [workspaceFilter, searchQ]);
+
+  return (
+    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
+      <div>
+        <h1 className="text-2xl font-semibold text-neutral-900 dark:text-neutral-100">
+          All leads
+        </h1>
+        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+          Every lead in every workspace. Filter by workspace or search by name or
+          email.
+        </p>
+      </div>
+
+      <Card>
+        <div className="flex flex-col gap-3 border-b border-neutral-200 p-4 dark:border-neutral-800 md:flex-row md:flex-wrap md:items-end">
+          <label className="flex min-w-[12rem] flex-1 flex-col gap-1 text-sm">
+            <span className="text-neutral-600 dark:text-neutral-400">
+              Workspace
+            </span>
+            <select
+              className="rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-950"
+              value={workspaceFilter}
+              onChange={(e) => setWorkspaceFilter(e.target.value)}
+            >
+              <option value="">All workspaces</option>
+              {(workspaces || []).map((w) => (
+                <option key={w.id} value={String(w.id)}>
+                  {workspaceLabel(w)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex min-w-[12rem] flex-1 flex-col gap-1 text-sm">
+            <span className="text-neutral-600 dark:text-neutral-400">
+              Search
+            </span>
+            <div className="flex gap-2">
+              <input
+                className="min-w-0 flex-1 rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-950"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Name or email"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") setSearchQ(searchInput.trim());
+                }}
+              />
+              <button
+                type="button"
+                className="shrink-0 rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white dark:bg-white dark:text-black"
+                onClick={() => setSearchQ(searchInput.trim())}
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="relative overflow-x-auto">
+          {listLoading && !loading ? (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60 dark:bg-black/40">
+              <span className="text-sm text-neutral-600">Loading…</span>
+            </div>
+          ) : null}
+          <Table>
+            <thead>
+              <tr>
+                <th className="text-left">ID</th>
+                <th className="text-left">Workspace</th>
+                <th className="text-left">Owner user</th>
+                <th className="text-left">Name</th>
+                <th className="text-left">Email</th>
+                <th className="text-left">Status</th>
+                <th className="text-left">Temp</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-sm text-neutral-500">
+                    Loading…
+                  </td>
+                </tr>
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-sm text-neutral-500">
+                    No leads match this filter.
+                  </td>
+                </tr>
+              ) : (
+                rows.map((r) => {
+                  const ws = wsById[r.workspace_id];
+                  return (
+                    <tr key={r.id}>
+                      <td className="font-mono text-xs">{r.id}</td>
+                      <td className="max-w-[10rem] truncate text-sm">
+                        {ws ? workspaceLabel(ws) : `#${r.workspace_id}`}
+                      </td>
+                      <td className="font-mono text-xs">
+                        {r.owner_user_id != null ? r.owner_user_id : "—"}
+                      </td>
+                      <td className="text-sm">{r.name}</td>
+                      <td className="text-sm">{r.email}</td>
+                      <td>
+                        <Badge>{r.status}</Badge>
+                      </td>
+                      <td className="text-xs text-neutral-600">
+                        {r.temperature_tag || "—"}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </Table>
+        </div>
+        <PaginationBar
+          page={page}
+          pages={pages}
+          total={total}
+          limit={limit}
+          onPageChange={setPage}
+        />
+      </Card>
+    </div>
+  );
+}

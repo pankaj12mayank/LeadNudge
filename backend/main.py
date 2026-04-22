@@ -29,20 +29,48 @@ from utils.logger import get_logger
 log = get_logger("main")
 
 
-async def _followup_scheduler_loop() -> None:
-    from services import followup_service
+def _followup_scheduler_tick_sync() -> tuple[int, int]:
+    """
+    Follow-up batch (Ollama + SMTP) and plan-expiry mail ticks.
 
+    Must not run on the asyncio event loop: those operations are synchronous and
+    would block every HTTP request (including /auth/login) until they finish.
+    """
+    from services import followup_service
+    from services.plan_expiry_notify_service import tick_pending_plan_expired_emails
+
+    db = SessionLocal()
+    try:
+        n = followup_service.process_due_followups_batch(db)
+        pe = tick_pending_plan_expired_emails(db, max_workspaces=2)
+        return n, pe
+    finally:
+        db.close()
+
+
+def _daily_maintenance_tick_sync() -> tuple[int, int]:
+    from services import lead_service, recovery_service
+
+    db = SessionLocal()
+    try:
+        n_tag = lead_service.recompute_all_temperature_tags(db)
+        n_rec = recovery_service.run_daily_recovery(db)
+        return n_tag, n_rec
+    finally:
+        db.close()
+
+
+async def _followup_scheduler_loop() -> None:
     await asyncio.sleep(4)
     while True:
-        db = SessionLocal()
         try:
-            n = followup_service.process_due_followups_batch(db)
+            n, pe = await asyncio.to_thread(_followup_scheduler_tick_sync)
             if n:
                 log.info("Processed %s due follow-up(s)", n)
+            if pe:
+                log.info("Plan-expired notification tick processed %s workspace(s)", pe)
         except Exception:
             log.exception("Follow-up scheduler tick failed")
-        finally:
-            db.close()
         await asyncio.sleep(30)
 
 
@@ -50,17 +78,13 @@ async def _daily_sales_maintenance_loop() -> None:
     """Once per UTC day: refresh lead temperature tags and queue missed-lead recovery."""
     from datetime import date, datetime, timezone
 
-    from services import lead_service, recovery_service
-
     await asyncio.sleep(60)
     last_run: date | None = None
     while True:
         today = datetime.now(timezone.utc).date()
         if last_run != today:
-            db = SessionLocal()
             try:
-                n_tag = lead_service.recompute_all_temperature_tags(db)
-                n_rec = recovery_service.run_daily_recovery(db)
+                n_tag, n_rec = await asyncio.to_thread(_daily_maintenance_tick_sync)
                 last_run = today
                 if n_tag or n_rec:
                     log.info(
@@ -70,14 +94,21 @@ async def _daily_sales_maintenance_loop() -> None:
                     )
             except Exception:
                 log.exception("Daily sales maintenance failed")
-            finally:
-                db.close()
         await asyncio.sleep(3600)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    db_cleanup = SessionLocal()
+    try:
+        from services import followup_service as _fu_svc
+
+        n_rec = _fu_svc.cancel_pending_recovery_followups(db_cleanup)
+        if n_rec:
+            log.info("Cancelled %s pending automatic recovery follow-up(s)", n_rec)
+    finally:
+        db_cleanup.close()
     STATIC_ROOT.mkdir(parents=True, exist_ok=True)
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     db = SessionLocal()

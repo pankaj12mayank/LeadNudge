@@ -104,10 +104,6 @@ def get_settings_out(
         workspace_ai_quota_exhausted,
         workspace_usage_limit,
     )
-    from services.plan_expiry_notify_service import maybe_send_plan_expired_emails
-
-    maybe_send_plan_expired_emails(db, workspace_id)
-
     master = workspace_usage_limit(db, workspace_id)
     if for_user_id is not None:
         usage_alerts_service.sync_user_usage_threshold_emails(db, for_user_id)
