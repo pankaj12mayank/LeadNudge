@@ -52,11 +52,31 @@ if (-not $SkipInstall) {
 }
 
 Write-Host "`n== Starting API + Vite (Ctrl+C stops both) ==" -ForegroundColor Green
+Write-Host "  (Vite reads repo .backend-port for the proxy — backend starts first.)" -ForegroundColor DarkGray
+
+$portFile = Join-Path $Root ".backend-port"
+Remove-Item $portFile -Force -ErrorAction SilentlyContinue
+
 $BackendJob = Start-Job -ScriptBlock {
     param($Py, $R)
     Set-Location "$R\backend"
     & $Py run_dev.py 2>&1
 } -ArgumentList $PyExe, $Root
+
+$deadline = (Get-Date).AddSeconds(60)
+while (-not (Test-Path $portFile) -and (Get-Date) -lt $deadline) {
+    Receive-Job $BackendJob -Keep -ErrorAction SilentlyContinue | ForEach-Object { "[backend] $_" }
+    if ($BackendJob.State -in @("Completed", "Failed", "Stopped")) { break }
+    Start-Sleep -Milliseconds 250
+}
+
+Receive-Job $BackendJob -Keep -ErrorAction SilentlyContinue | ForEach-Object { "[backend] $_" }
+
+if (-not (Test-Path $portFile)) {
+    Stop-Job $BackendJob -ErrorAction SilentlyContinue
+    Remove-Job $BackendJob -ErrorAction SilentlyContinue
+    Write-Error "Backend did not write $portFile (timed out). Fix backend errors above, or set a fixed BACKEND_PORT in ports.env."
+}
 
 $FrontendJob = Start-Job -ScriptBlock {
     param($R)
