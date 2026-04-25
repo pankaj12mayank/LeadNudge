@@ -1,49 +1,110 @@
 @echo off
-setlocal EnableExtensions
 cd /d "%~dp0"
 
-REM Backend / Frontend / Ollama open minimized (taskbar). Restore a window to see logs.
-REM Ports: edit ports.env next to this file (BACKEND_PORT=0 = auto free port from 8000).
-REM Set SKIP_OLLAMA_AUTO=1 to skip starting Ollama.
+REM LeadNudge — one double-click: venv + pip + npm + verify, then backend + frontend in ONE window.
+REM Ollama runs in a separate window when not already listening on 11434.
+REM Optional: set SKIP_OLLAMA_AUTO=1 to skip starting Ollama.
 
-set "BACKEND=%~dp0backend"
-set "FRONTEND=%~dp0frontend"
+title LeadNudge — starting
 
-set "PYEXE=python"
-if exist "%~dp0.venv\Scripts\python.exe" set "PYEXE=%~dp0.venv\Scripts\python.exe"
-if exist "%~dp0backend\.venv\Scripts\python.exe" set "PYEXE=%~dp0backend\.venv\Scripts\python.exe"
+echo.
+echo  LeadNudge — install, verify, run
+echo  Root: %~dp0
+echo.
+
+where python >nul 2>&1
+if errorlevel 1 (
+  echo ERROR: Python not on PATH. Install Python 3.11+ from https://www.python.org/downloads/
+  pause
+  exit /b 1
+)
+where npm >nul 2>&1
+if errorlevel 1 (
+  echo ERROR: npm not on PATH. Install Node.js LTS from https://nodejs.org/
+  pause
+  exit /b 1
+)
+
+if not exist "%~dp0.venv\Scripts\python.exe" (
+  echo [1/4] Creating virtual environment .venv ...
+  python -m venv "%~dp0.venv"
+  if errorlevel 1 (
+    echo ERROR: Could not create .venv
+    pause
+    exit /b 1
+  )
+)
+
+set "PYEXE=%~dp0.venv\Scripts\python.exe"
+
+echo [2/4] Backend dependencies ^(pip^)...
+"%PYEXE%" -m pip install -q --upgrade pip
+if errorlevel 1 (
+  echo ERROR: pip upgrade failed
+  pause
+  exit /b 1
+)
+"%PYEXE%" -m pip install -q -r "%~dp0backend\requirements.txt"
+if errorlevel 1 (
+  echo ERROR: pip install requirements failed
+  pause
+  exit /b 1
+)
+
+echo [3/4] Frontend dependencies ^(npm^)...
+pushd "%~dp0frontend"
+call npm install --no-fund --no-audit
+if errorlevel 1 (
+  echo ERROR: npm install failed
+  popd
+  pause
+  exit /b 1
+)
+popd
+
+echo [4/4] Verify...
+"%PYEXE%" -c "import fastapi, uvicorn; print('  Backend imports: OK')"
+if errorlevel 1 (
+  echo ERROR: Backend verification failed
+  pause
+  exit /b 1
+)
+if not exist "%~dp0frontend\node_modules\vite\package.json" (
+  echo ERROR: frontend node_modules incomplete ^(vite missing^)
+  pause
+  exit /b 1
+)
+echo   Frontend: OK ^(vite present^)
 
 if not defined SKIP_OLLAMA_AUTO (
   curl -s -m 2 http://127.0.0.1:11434/api/tags >nul 2>&1
   if errorlevel 1 (
-    where ollama >nul 2>&1 && start "Ollama" cmd /k ollama serve
+    where ollama >nul 2>&1 && (
+      echo.
+      echo  Starting Ollama in a separate window...
+      start "LeadNudge - Ollama" cmd /k "ollama serve"
+      timeout /t 2 /nobreak >nul
+    )
   )
 )
 
 echo.
 curl -s -m 3 http://127.0.0.1:11434/api/version >nul 2>&1
 if errorlevel 1 (
-  echo  Ollama: not reachable on port 11434 — local AI may not work until Ollama is running.
+  echo  Ollama: not on port 11434 ^(optional — needed for local AI features^)
 ) else (
-  echo  Ollama: OK on http://127.0.0.1:11434
+  echo  Ollama: OK at http://127.0.0.1:11434
 )
 
 echo.
-echo  [1/2] Opening BACKEND (minimized)...
-start /MIN "AI Sales - Backend" cmd /k "cd /d ""%BACKEND%"" && ""%PYEXE%"" run_prod.py"
+echo  Backend + frontend will run below with [backend] / [frontend] prefixes.
+echo  Press Ctrl+C in this window to stop both.
+echo.
 
-timeout /t 3 /nobreak >nul
-
-echo  [2/2] Opening FRONTEND (minimized)...
-start /MIN "AI Sales - Frontend" cmd /k "cd /d ""%FRONTEND%"" && npm run dev"
-
-timeout /t 3 /nobreak >nul
-start "" "http://localhost:5173"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0dev.ps1" -SkipInstall
+set "PS_EXIT=%ERRORLEVEL%"
 
 echo.
-echo  Done. Backend and Frontend run minimized — click taskbar buttons to view logs.
-echo  Browser: http://localhost:5173
-echo  Tip: do not pin frontend/.env VITE_API_URL to port 8000 if BACKEND_PORT=0 — use Vite /api proxy.
-
-endlocal
-exit /b 0
+if not "%PS_EXIT%"=="0" echo  dev.ps1 exited with code %PS_EXIT%
+pause
+exit /b %PS_EXIT%

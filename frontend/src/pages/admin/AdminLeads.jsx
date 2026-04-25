@@ -29,6 +29,61 @@ export default function AdminLeads() {
     return m;
   }, [workspaces]);
 
+  const columns = useMemo(
+    () => [
+      {
+        key: "id",
+        label: "ID",
+        render: (r) => <span className="font-mono text-xs">{r.id}</span>,
+      },
+      {
+        key: "workspace",
+        label: "Workspace",
+        render: (r) => {
+          const ws = wsById[r.workspace_id];
+          return (
+            <span className="max-w-[10rem] truncate text-sm">
+              {ws ? workspaceLabel(ws) : `#${r.workspace_id}`}
+            </span>
+          );
+        },
+      },
+      {
+        key: "owner_user_id",
+        label: "Owner user",
+        render: (r) => (
+          <span className="font-mono text-xs">
+            {r.owner_user_id != null ? r.owner_user_id : "—"}
+          </span>
+        ),
+      },
+      { key: "name", label: "Name", render: (r) => <span className="text-sm">{r.name}</span> },
+      { key: "email", label: "Email", render: (r) => <span className="text-sm">{r.email}</span> },
+      {
+        key: "status",
+        label: "Status",
+        render: (r) => <Badge>{r.status}</Badge>,
+      },
+      {
+        key: "temperature_tag",
+        label: "Temp",
+        render: (r) => (
+          <span className="text-xs text-neutral-600 dark:text-neutral-400">
+            {r.temperature_tag || "—"}
+          </span>
+        ),
+      },
+    ],
+    [wsById],
+  );
+
+  function apiErrorMessage(e) {
+    const d = e?.response?.data?.detail;
+    if (typeof d === "string") return d;
+    if (Array.isArray(d)) return d.map((x) => x?.msg ?? x).join("; ");
+    return e?.message ?? "Request failed";
+  }
+
   useEffect(() => {
     let c = false;
     adminService
@@ -62,7 +117,7 @@ export default function AdminLeads() {
           setPages(data.pages ?? 1);
         }
       } catch (e) {
-        if (!c) toast.error(e.message);
+        if (!c) toast.error(apiErrorMessage(e));
       } finally {
         if (!c) {
           setListLoading(false);
@@ -135,71 +190,36 @@ export default function AdminLeads() {
           </div>
         </div>
 
-        <div className="relative overflow-x-auto">
-          {listLoading && !loading ? (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60 dark:bg-black/40">
-              <span className="text-sm text-neutral-600">Loading…</span>
-            </div>
-          ) : null}
-          <Table>
-            <thead>
-              <tr>
-                <th className="text-left">ID</th>
-                <th className="text-left">Workspace</th>
-                <th className="text-left">Owner user</th>
-                <th className="text-left">Name</th>
-                <th className="text-left">Email</th>
-                <th className="text-left">Status</th>
-                <th className="text-left">Temp</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={7} className="py-8 text-center text-sm text-neutral-500">
+        {loading ? (
+          <p className="px-4 py-8 text-center text-sm text-neutral-500 dark:text-neutral-400">
+            Loading…
+          </p>
+        ) : (
+          <>
+            <div className="relative min-h-[12rem] overflow-x-auto">
+              {listLoading ? (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 dark:bg-neutral-950/80">
+                  <span className="text-sm text-neutral-600 dark:text-neutral-300">
                     Loading…
-                  </td>
-                </tr>
-              ) : rows.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-8 text-center text-sm text-neutral-500">
-                    No leads match this filter.
-                  </td>
-                </tr>
-              ) : (
-                rows.map((r) => {
-                  const ws = wsById[r.workspace_id];
-                  return (
-                    <tr key={r.id}>
-                      <td className="font-mono text-xs">{r.id}</td>
-                      <td className="max-w-[10rem] truncate text-sm">
-                        {ws ? workspaceLabel(ws) : `#${r.workspace_id}`}
-                      </td>
-                      <td className="font-mono text-xs">
-                        {r.owner_user_id != null ? r.owner_user_id : "—"}
-                      </td>
-                      <td className="text-sm">{r.name}</td>
-                      <td className="text-sm">{r.email}</td>
-                      <td>
-                        <Badge>{r.status}</Badge>
-                      </td>
-                      <td className="text-xs text-neutral-600">
-                        {r.temperature_tag || "—"}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </Table>
-        </div>
-        <PaginationBar
-          page={page}
-          pages={pages}
-          total={total}
-          limit={limit}
-          onPageChange={setPage}
-        />
+                  </span>
+                </div>
+              ) : null}
+              <Table
+                columns={columns}
+                rows={rows}
+                emptyText="No leads match this filter."
+              />
+            </div>
+            <PaginationBar
+              page={page}
+              pages={pages}
+              total={total}
+              limit={limit}
+              disabled={listLoading}
+              onPageChange={setPage}
+            />
+          </>
+        )}
       </Card>
     </div>
   );
