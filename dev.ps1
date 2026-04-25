@@ -52,9 +52,9 @@ if (-not $SkipInstall) {
 }
 
 Write-Host "`n== Starting API + Vite (Ctrl+C stops both) ==" -ForegroundColor Green
-Write-Host "  (Vite reads repo .backend-port for the proxy — backend starts first.)" -ForegroundColor DarkGray
+Write-Host '  (Vite reads repo .backend-port for the proxy; backend starts first.)' -ForegroundColor DarkGray
 
-$portFile = Join-Path $Root ".backend-port"
+$portFile = Join-Path $Root '.backend-port'
 Remove-Item $portFile -Force -ErrorAction SilentlyContinue
 
 $BackendJob = Start-Job -ScriptBlock {

@@ -18,7 +18,7 @@ if __name__ == "__main__":
     port = resolve_backend_listen_port(want, host)
     if want == 0:
         print(
-            f"\n  [backend] BACKEND_PORT=0 — using free port {port} (written to .backend-port for Vite)\n",
+            f"\n  [backend] BACKEND_PORT=0 - using free port {port} (written to .backend-port for Vite)\n",
             flush=True,
         )
 

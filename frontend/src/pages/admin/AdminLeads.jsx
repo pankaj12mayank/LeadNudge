@@ -84,6 +84,12 @@ export default function AdminLeads() {
     return e?.message ?? "Request failed";
   }
 
+  const workspaceIdParam = useMemo(() => {
+    if (workspaceFilter === "") return undefined;
+    const n = Number(workspaceFilter);
+    return Number.isFinite(n) ? n : undefined;
+  }, [workspaceFilter]);
+
   useEffect(() => {
     let c = false;
     adminService
@@ -104,9 +110,7 @@ export default function AdminLeads() {
     (async () => {
       setListLoading(true);
       try {
-        const wid =
-          workspaceFilter === "" ? undefined : Number(workspaceFilter);
-        const data = await userService.listLeads(wid, {
+        const data = await userService.listLeads(workspaceIdParam, {
           page,
           limit,
           q: searchQ || undefined,
@@ -128,11 +132,7 @@ export default function AdminLeads() {
     return () => {
       c = true;
     };
-  }, [page, limit, workspaceFilter, searchQ]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [workspaceFilter, searchQ]);
+  }, [page, limit, workspaceIdParam, searchQ]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
@@ -155,7 +155,10 @@ export default function AdminLeads() {
             <select
               className="rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-950"
               value={workspaceFilter}
-              onChange={(e) => setWorkspaceFilter(e.target.value)}
+              onChange={(e) => {
+                setPage(1);
+                setWorkspaceFilter(e.target.value);
+              }}
             >
               <option value="">All workspaces</option>
               {(workspaces || []).map((w) => (
@@ -176,13 +179,19 @@ export default function AdminLeads() {
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="Name or email"
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") setSearchQ(searchInput.trim());
+                  if (e.key === "Enter") {
+                    setPage(1);
+                    setSearchQ(searchInput.trim());
+                  }
                 }}
               />
               <button
                 type="button"
                 className="shrink-0 rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white dark:bg-white dark:text-black"
-                onClick={() => setSearchQ(searchInput.trim())}
+                onClick={() => {
+                  setPage(1);
+                  setSearchQ(searchInput.trim());
+                }}
               >
                 Apply
               </button>
