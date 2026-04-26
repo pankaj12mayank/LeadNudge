@@ -8,6 +8,7 @@ from core.security import hash_password
 from core.workspaces import FREE_WORKSPACE_NAME, PRO_WORKSPACE_NAME
 from models.followup import Followup
 from models.lead import Lead
+from core.followup_ai_defaults import DEFAULT_FOLLOWUP_AI_CUSTOM_PROMPT
 from models.settings import WorkspaceSettings
 from models.user import User
 from models.workspace import Workspace
@@ -52,6 +53,7 @@ def ensure_fixed_workspaces(db: Session) -> None:
                     ai_mode="local",
                     api_key=None,
                     usage_limit=_usage_limit_for_plan(plan),
+                    followup_ai_custom_prompt=DEFAULT_FOLLOWUP_AI_CUSTOM_PROMPT,
                 )
             )
             db.commit()

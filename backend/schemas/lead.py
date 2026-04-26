@@ -7,8 +7,49 @@ from pydantic import BaseModel, EmailStr, Field, field_serializer, field_validat
 from core.validation import is_valid_phone, normalize_country_code
 
 ALLOWED_LEAD_STATUSES = frozenset(
-    {"new", "contacted", "interested", "not_interested", "closed"}
+    {
+        # Legacy / funnel
+        "new",
+        "contacted",
+        "interested",
+        "not_interested",
+        "closed",
+        # Pipeline (snake_case in API / DB)
+        "old",
+        "request_sent",
+        "message_sent",
+        "replied_got",
+        "on_discussion",
+        "just_lead",
+        "deal",
+        "close",
+        "fail",
+    }
 )
+
+ALLOWED_LEAD_TYPES = frozenset({"A+", "A", "B", "C"})
+
+_STATUS_KEY_RE = re.compile(r"_+")
+
+
+def normalize_csv_status_value(raw: str | None) -> str:
+    """Map CSV / UI free text to a canonical status slug."""
+    if not raw or not str(raw).strip():
+        return "new"
+    k = str(raw).strip().lower().replace(" ", "_").replace("-", "_")
+    k = _STATUS_KEY_RE.sub("_", k).strip("_")
+    if k in ALLOWED_LEAD_STATUSES:
+        return k
+    return "new"
+
+
+def normalize_csv_lead_type(raw: str | None) -> str | None:
+    if not raw or not str(raw).strip():
+        return None
+    t = str(raw).strip().upper()
+    if t in ALLOWED_LEAD_TYPES:
+        return t
+    return None
 
 
 class LeadCreate(BaseModel):
@@ -19,11 +60,6 @@ class LeadCreate(BaseModel):
     phone_number: str | None = Field(default=None, max_length=64)
     country_code: str | None = Field(default=None, max_length=8)
     company: str | None = Field(default=None, max_length=255)
-    last_message: str | None = Field(
-        default=None,
-        max_length=20000,
-        description="Last note or inbound message; used as AI context when no thread exists",
-    )
     role_title: str | None = Field(default=None, max_length=255)
     profile_link: str | None = Field(default=None, max_length=512)
     agency_type: str | None = Field(default=None, max_length=128)
@@ -32,6 +68,8 @@ class LeadCreate(BaseModel):
     last_active_display: str | None = Field(default=None, max_length=128)
     connection_sent_date: str | None = Field(default=None, max_length=128)
     replied_y_n: str | None = Field(default=None, max_length=8)
+    solution: str | None = Field(default=None, max_length=20000)
+    lead_type: str | None = Field(default=None, max_length=8)
 
     @field_validator("phone_number")
     @classmethod
@@ -52,6 +90,22 @@ class LeadCreate(BaseModel):
             raise ValueError(f"Status must be one of: {', '.join(sorted(ALLOWED_LEAD_STATUSES))}")
         return v
 
+    @field_validator("lead_type")
+    @classmethod
+    def lead_type_ok(cls, v: str | None) -> str | None:
+        if v is None or not str(v).strip():
+            return None
+        t = str(v).strip().upper()
+        if t == "A+":
+            t = "A+"
+        elif t in ("A", "B", "C"):
+            pass
+        else:
+            raise ValueError("Lead type must be one of: A+, A, B, C")
+        if t not in ALLOWED_LEAD_TYPES:
+            raise ValueError("Lead type must be one of: A+, A, B, C")
+        return t
+
 
 class LeadUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
@@ -61,7 +115,6 @@ class LeadUpdate(BaseModel):
     phone_number: str | None = Field(default=None, max_length=64)
     country_code: str | None = Field(default=None, max_length=8)
     company: str | None = Field(default=None, max_length=255)
-    last_message: str | None = Field(default=None, max_length=20000)
     role_title: str | None = Field(default=None, max_length=255)
     profile_link: str | None = Field(default=None, max_length=512)
     agency_type: str | None = Field(default=None, max_length=128)
@@ -70,6 +123,8 @@ class LeadUpdate(BaseModel):
     last_active_display: str | None = Field(default=None, max_length=128)
     connection_sent_date: str | None = Field(default=None, max_length=128)
     replied_y_n: str | None = Field(default=None, max_length=8)
+    solution: str | None = Field(default=None, max_length=20000)
+    lead_type: str | None = Field(default=None, max_length=8)
 
     @field_validator("phone_number")
     @classmethod
@@ -94,6 +149,22 @@ class LeadUpdate(BaseModel):
             raise ValueError(f"Status must be one of: {', '.join(sorted(ALLOWED_LEAD_STATUSES))}")
         return v
 
+    @field_validator("lead_type")
+    @classmethod
+    def lead_type_ok(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if not str(v).strip():
+            return None
+        t = str(v).strip().upper()
+        if t == "A+":
+            t = "A+"
+        elif t not in ("A", "B", "C"):
+            raise ValueError("Lead type must be one of: A+, A, B, C")
+        if t not in ALLOWED_LEAD_TYPES:
+            raise ValueError("Lead type must be one of: A+, A, B, C")
+        return t
+
 
 class LeadOut(BaseModel):
     id: int
@@ -105,7 +176,6 @@ class LeadOut(BaseModel):
     country_code: str | None
     company: str | None = None
     temperature_tag: str | None = None
-    last_message: str | None = None
     role_title: str | None = None
     profile_link: str | None = None
     agency_type: str | None = None
@@ -114,6 +184,8 @@ class LeadOut(BaseModel):
     last_active_display: str | None = None
     connection_sent_date: str | None = None
     replied_y_n: str | None = None
+    solution: str | None = None
+    lead_type: str | None = None
     workspace_id: int
     owner_user_id: int | None = None
     created_at: datetime | None = None
@@ -167,6 +239,19 @@ class LeadsBatchDeleteRequest(BaseModel):
 
 class LeadsBatchDeleteOut(BaseModel):
     deleted: int
+
+
+class SuggestSolutionOut(BaseModel):
+    solution: str
+
+
+class SuggestSolutionBody(BaseModel):
+    """Draft Solution from Problem without an existing lead row (e.g. Add Lead form)."""
+
+    problem_seen: str = Field(min_length=1, max_length=20000)
+    company: str | None = Field(default=None, max_length=255)
+    role_title: str | None = Field(default=None, max_length=255)
+    lead_name: str | None = Field(default=None, max_length=255)
 
 
 _EMOJI_RE = re.compile(

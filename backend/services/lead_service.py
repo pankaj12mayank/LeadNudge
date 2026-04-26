@@ -17,10 +17,11 @@ from core.validation import (
 )
 from models.lead import Lead
 from schemas.lead import (
-    ALLOWED_LEAD_STATUSES,
     LeadCreate,
     LeadCsvImportResult,
     LeadUpdate,
+    normalize_csv_lead_type,
+    normalize_csv_status_value,
     sanitize_csv_cell,
 )
 from schemas.pagination import PaginationParams
@@ -63,15 +64,6 @@ def recompute_all_temperature_tags(db: Session) -> int:
     return changed
 
 
-def _map_csv_status(raw: str | None) -> str:
-    if not raw or not str(raw).strip():
-        return "new"
-    k = str(raw).strip().lower().replace(" ", "_")
-    if k in ALLOWED_LEAD_STATUSES:
-        return k
-    return "new"
-
-
 def _get_lead_in_workspace(db: Session, lead_id: int, workspace_id: int) -> Lead:
     lead = db.get(Lead, lead_id)
     if not lead or lead.workspace_id != workspace_id:
@@ -99,11 +91,14 @@ def list_leads(
     search: str | None = None,
     status: str | None = None,
     owner_user_id: int | None = None,
+    assignee_user_id: int | None = None,
 ) -> tuple[list[Lead], int]:
     q = db.query(Lead)
     if is_admin:
         if workspace_id is not None:
             q = q.filter(Lead.workspace_id == workspace_id)
+        if assignee_user_id is not None:
+            q = q.filter(Lead.owner_user_id == assignee_user_id)
     else:
         if workspace_id is None or owner_user_id is None:
             return [], 0
@@ -128,7 +123,8 @@ def list_leads(
                 Lead.last_active_display.ilike(term),
                 Lead.connection_sent_date.ilike(term),
                 Lead.replied_y_n.ilike(term),
-                Lead.last_message.ilike(term),
+                Lead.solution.ilike(term),
+                Lead.lead_type.ilike(term),
             )
         )
     total = q.count()
@@ -146,7 +142,6 @@ def create_lead(
     *,
     owner_user_id: int | None = None,
 ) -> Lead:
-    lm = (data.last_message or "").strip() or None
     co = (data.company or "").strip() or None
     lead = Lead(
         name=data.name,
@@ -156,7 +151,6 @@ def create_lead(
         phone_number=data.phone_number,
         country_code=data.country_code,
         company=co,
-        last_message=lm,
         role_title=(data.role_title or "").strip() or None,
         profile_link=(data.profile_link or "").strip() or None,
         agency_type=(data.agency_type or "").strip() or None,
@@ -165,6 +159,8 @@ def create_lead(
         last_active_display=(data.last_active_display or "").strip() or None,
         connection_sent_date=(data.connection_sent_date or "").strip() or None,
         replied_y_n=(data.replied_y_n or "").strip() or None,
+        solution=(data.solution or "").strip() or None,
+        lead_type=data.lead_type,
         workspace_id=workspace_id,
         temperature_tag="hot",
         owner_user_id=owner_user_id,
@@ -205,8 +201,6 @@ def update_lead(
         lead.country_code = data.country_code
     if data.company is not None:
         lead.company = (data.company or "").strip() or None
-    if data.last_message is not None:
-        lead.last_message = (data.last_message or "").strip() or None
     if data.role_title is not None:
         lead.role_title = (data.role_title or "").strip() or None
     if data.profile_link is not None:
@@ -223,6 +217,10 @@ def update_lead(
         lead.connection_sent_date = (data.connection_sent_date or "").strip() or None
     if data.replied_y_n is not None:
         lead.replied_y_n = (data.replied_y_n or "").strip() or None
+    if data.solution is not None:
+        lead.solution = (data.solution or "").strip() or None
+    if data.lead_type is not None:
+        lead.lead_type = data.lead_type
     if lead.created_at:
         lead.temperature_tag = temperature_for_created_at(lead.created_at)
     db.commit()
@@ -418,15 +416,20 @@ def import_leads_from_csv(
                 continue
             notes_val = cl("notes") if "notes" in hm else ""
             lm_csv = cl("last_message") if "last_message" in hm else ""
-            last_m = (notes_val or lm_csv or "").strip() or None
+            legacy_note = (notes_val or lm_csv or "").strip() or None
             csv_st = cl("status") if "status" in hm else ""
-            lead_status = _map_csv_status(csv_st or None)
+            lead_status = normalize_csv_status_value(csv_st or None)
             company = None
             if "company" in hm:
                 c = cl("company")
                 company = c if c else None
             role_title = profile_link = agency_type = team_size_estimate = None
-            problem_seen = last_active_display = connection_sent_date = replied_y_n = None
+            problem_seen = legacy_note
+            last_active_display = connection_sent_date = replied_y_n = None
+            solution_legacy = (cl("solution") or "").strip() or None
+            lead_type_legacy = normalize_csv_lead_type(
+                (cl("lead type") or cl("lead_type") or "").strip() or None
+            )
         else:
             name = _csv_cell(row, hm, "name")
             if not name:
@@ -469,6 +472,12 @@ def import_leads_from_csv(
             agency_type = _csv_col_by_prefix(hm, row, "agency type") or None
             team_size = _csv_col_by_prefix(hm, row, "team size") or None
             problem_seen = _csv_cell(row, hm, "problem seen") or None
+            notes_only = _csv_cell(row, hm, "notes").strip() or None
+            if notes_only:
+                if problem_seen:
+                    problem_seen = f"{problem_seen}\n\n(Imported note: {notes_only})"
+                else:
+                    problem_seen = notes_only
             last_active_display = _csv_cell(row, hm, "last active") or None
             connection_sent_date = _csv_col_by_prefix(hm, row, "connection sent") or None
             replied_raw = ""
@@ -479,10 +488,10 @@ def import_leads_from_csv(
             replied_y_n = replied_raw or None
             team_size_estimate = team_size or None
             csv_status = _csv_cell(row, hm, "status")
-            last_m = (
-                _csv_cell(row, hm, "notes", "last_message").strip() or None
-            )
-            lead_status = _map_csv_status(csv_status or None)
+            lead_status = normalize_csv_status_value(csv_status or None)
+            solution = _csv_cell(row, hm, "solution") or None
+            lt_raw = _csv_cell(row, hm, "lead type", "lead_type", "leadtype")
+            lead_type_imp = normalize_csv_lead_type(lt_raw or None)
 
         if db.query(Lead).filter(Lead.workspace_id == workspace_id, Lead.email == email_raw).first():
             skipped += 1
@@ -499,15 +508,16 @@ def import_leads_from_csv(
                     phone_number=phone,
                     country_code=cc,
                     company=company,
-                    last_message=last_m,
                     role_title=None,
                     profile_link=None,
                     agency_type=None,
                     team_size_estimate=None,
-                    problem_seen=None,
+                    problem_seen=problem_seen,
                     last_active_display=None,
                     connection_sent_date=None,
                     replied_y_n=None,
+                    solution=solution_legacy,
+                    lead_type=lead_type_legacy,
                     workspace_id=workspace_id,
                     temperature_tag="hot",
                     owner_user_id=owner_user_id,
@@ -523,7 +533,6 @@ def import_leads_from_csv(
                     phone_number=phone,
                     country_code=cc,
                     company=company or None,
-                    last_message=last_m,
                     role_title=role_title,
                     profile_link=profile_link,
                     agency_type=agency_type,
@@ -532,6 +541,8 @@ def import_leads_from_csv(
                     last_active_display=last_active_display,
                     connection_sent_date=connection_sent_date,
                     replied_y_n=replied_y_n,
+                    solution=solution or None,
+                    lead_type=lead_type_imp,
                     workspace_id=workspace_id,
                     temperature_tag="hot",
                     owner_user_id=owner_user_id,

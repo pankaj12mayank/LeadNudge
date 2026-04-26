@@ -2,6 +2,9 @@ from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field, TypeAdapter, field_validator
 
+from core.followup_ai_defaults import MIN_FOLLOWUP_AI_CUSTOM_PROMPT_LEN
+from schemas.merge_field_labels import LeadMergeFieldOut
+
 _smtp_email_adapter = TypeAdapter(EmailStr)
 
 
@@ -31,6 +34,9 @@ class SettingsOut(BaseModel):
     smtp_fully_configured: bool = False
     dashboard_manual_replies: int = 0
     dashboard_manual_conversions: int = 0
+    portfolio_attached: bool = False
+    followup_ai_custom_prompt: str | None = None
+    lead_merge_fields: list[LeadMergeFieldOut] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
@@ -47,6 +53,13 @@ class SettingsUpdate(BaseModel):
     followup_opening_line: str | None = Field(default=None, max_length=500)
     followup_closing_template: str | None = Field(default=None, max_length=4000)
     followup_sender_display_name: str | None = Field(default=None, max_length=120)
+    followup_ai_custom_prompt: str | None = Field(
+        default=None,
+        max_length=12000,
+        description="Required when updating. Placeholders include {{problem_seen}}, {{solution}}, "
+        "{{context}}, {{lead_name}}, {{lead_email}}, {{lead_status}}, {{tag}}, {{company}}, "
+        "{{role_title}}.",
+    )
     dashboard_manual_replies: int | None = Field(default=None, ge=0, le=10_000_000)
     dashboard_manual_conversions: int | None = Field(default=None, ge=0, le=10_000_000)
 
@@ -67,6 +80,19 @@ class SettingsUpdate(BaseModel):
             return None
         s = v.strip()
         return s or None
+
+    @field_validator("followup_ai_custom_prompt")
+    @classmethod
+    def followup_ai_custom_prompt_nonempty(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        s = v.strip()
+        if len(s) < MIN_FOLLOWUP_AI_CUSTOM_PROMPT_LEN:
+            raise ValueError(
+                "AI follow-up body instructions are required and must be at least "
+                f"{MIN_FOLLOWUP_AI_CUSTOM_PROMPT_LEN} characters."
+            )
+        return s
 
 
 class AdminSettingsUpdate(BaseModel):

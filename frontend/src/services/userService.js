@@ -2,12 +2,13 @@ import api from "./api";
 
 export async function listLeads(
   workspaceId,
-  { page = 1, limit = 50, q, status } = {},
+  { page = 1, limit = 50, q, status, lead_owner_id } = {},
 ) {
   const params = { page, limit };
   if (workspaceId != null) params.workspace_id = workspaceId;
   if (q) params.q = q;
   if (status) params.status = status;
+  if (lead_owner_id != null) params.lead_owner_id = lead_owner_id;
   const { data } = await api.get("/leads", { params });
   return data;
 }
@@ -31,6 +32,29 @@ export async function deleteLead(id) {
 export async function deleteLeadsBatch(ids) {
   const { data } = await api.post("/leads/bulk-delete", { ids });
   return data;
+}
+
+/** AI draft for the Solution field from Problem / situation (Ollama or API). */
+export async function suggestLeadSolutionFromProblem(payload, workspaceId) {
+  const params =
+    workspaceId != null ? { workspace_id: workspaceId } : undefined;
+  const { data } = await api.post(
+    "/leads/suggest-solution-from-problem",
+    payload,
+    params ? { params } : {},
+  );
+  return data;
+}
+
+export async function uploadPortfolioPdf(file) {
+  const body = new FormData();
+  body.append("file", file);
+  const { data } = await api.post("/settings/portfolio", body);
+  return data;
+}
+
+export async function deletePortfolioPdf() {
+  await api.delete("/settings/portfolio");
 }
 
 export async function importLeadsCsv(file, workspaceId) {

@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 
 from api.deps import Principal, get_principal
 from db.session import get_db
+from models.settings import WorkspaceSettings
+from models.workspace import Workspace
 from schemas.lead import (
     LeadCreate,
     LeadCsvImportResult,
@@ -14,19 +16,25 @@ from schemas.lead import (
     LeadsBatchDeleteRequest,
     LeadUpdate,
     PaginatedLeads,
+    SuggestSolutionBody,
+    SuggestSolutionOut,
 )
 from services import lead_service
+from services.plan_access_service import ai_features_blocked, validate_user_ai_scheduling
+from services.solution_ai_service import suggest_solution_from_problem
 
 router = APIRouter(prefix="/leads", tags=["leads"])
 
 CSV_SAMPLE = (
     '"Name","Company","Role","Profile Link","Agency Type (SEO / Ads / Creative)",'
     '"Team Size (estimate)","Problem Seen","Last Active","Connection Sent (Date)",'
-    '"Replied (Y/N)","Status"\n'
+    '"Replied (Y/N)","Solution","Lead Type","Status"\n'
     '"Jane Agency Lead","Pixel Growth Co","Founder","https://linkedin.com/in/example",'
-    '"SEO","10-20","Asked for technical audit","2025-01-12","2025-01-08","Y","contacted"\n'
+    '"SEO","10-20","Asked for technical audit","2025-01-12","2025-01-08","Y",'
+    '"Audit + retainer pitch","A+","message_sent"\n'
     '"Ravi Mehta","Monsoon Ads","Head of Growth","https://linkedin.com/in/ravimehta",'
-    '"Ads","50+","Budget freeze concern","2025-01-10","2025-01-02","N","new"\n'
+    '"Ads","50+","Budget freeze concern","2025-01-10","2025-01-02","N",'
+    '"Performance creative sprint","B","on_discussion"\n'
 )
 
 
@@ -83,11 +91,76 @@ def delete_leads_batch_delete(
     return _leads_batch_delete_handler(body, principal, db)
 
 
+@router.post("/suggest-solution-from-problem", response_model=SuggestSolutionOut)
+def post_suggest_solution_from_problem(
+    body: SuggestSolutionBody,
+    principal: Annotated[Principal, Depends(get_principal)],
+    db: Annotated[Session, Depends(get_db)],
+    workspace_id: int | None = Query(
+        default=None,
+        description="Admin only: workspace whose AI settings to use",
+    ),
+) -> SuggestSolutionOut:
+    """Draft the Solution CRM field from Problem / situation (before or after saving the lead)."""
+    if principal.role == "admin":
+        if workspace_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="workspace_id query is required for admin",
+            )
+        wid = int(workspace_id)
+        if ai_features_blocked(db, wid):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="AI features are not available for this workspace.",
+            )
+    else:
+        if principal.workspace_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No workspace assigned",
+            )
+        wid = int(principal.workspace_id)
+        validate_user_ai_scheduling(db, wid, int(principal.user_id))
+
+    row = (
+        db.query(WorkspaceSettings)
+        .filter(WorkspaceSettings.workspace_id == wid)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Settings not found")
+    ws_row = db.get(Workspace, wid)
+    plan = (ws_row.plan_type or "free") if ws_row else "free"
+
+    text = suggest_solution_from_problem(
+        problem_seen=body.problem_seen,
+        company=body.company,
+        role_title=body.role_title,
+        lead_name=body.lead_name,
+        ai_mode=row.ai_mode,
+        api_key=row.api_key,
+        ollama_model=row.ollama_model,
+        workspace_plan=plan,
+    )
+    if not (text or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not draft a solution — check AI (Ollama) or shorten the problem text.",
+        )
+    return SuggestSolutionOut(solution=text.strip())
+
+
 @router.get("", response_model=PaginatedLeads)
 def list_leads(
     principal: Annotated[Principal, Depends(get_principal)],
     db: Annotated[Session, Depends(get_db)],
     workspace_id: int | None = Query(default=None),
+    lead_owner_id: int | None = Query(
+        default=None,
+        ge=1,
+        description="Admin only: show leads assigned to this user (owner_user_id)",
+    ),
     q: str | None = Query(default=None, max_length=200),
     status: str | None = Query(default=None, max_length=64),
     page: int = Query(default=1, ge=1),
@@ -97,6 +170,11 @@ def list_leads(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot scope other workspaces",
+        )
+    if principal.role == "user" and lead_owner_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="lead_owner_id is admin-only",
         )
     wid = _workspace_scope(principal, workspace_id)
     rows, total = lead_service.list_leads(
@@ -108,6 +186,7 @@ def list_leads(
         search=q,
         status=status,
         owner_user_id=principal.user_id if principal.role == "user" else None,
+        assignee_user_id=lead_owner_id if principal.role == "admin" else None,
     )
     return PaginatedLeads.from_page(
         [LeadOut.model_validate(x) for x in rows],

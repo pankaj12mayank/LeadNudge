@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from agents.ai_router import FALLBACK_FOLLOWUP_BODY
+from core.followup_ai_defaults import MIN_FOLLOWUP_AI_CUSTOM_PROMPT_LEN
 from agents.followup_agent import generate_followup
 from models.followup import Followup
 from models.lead import Lead
@@ -77,12 +78,12 @@ def dedupe_and_normalize_pending_followups(db: Session) -> None:
             log.exception("dedupe_and_normalize_pending_followups commit failed")
 
 
-def _emphasize_lead_last_message_in_body(body: str, last_message: str | None) -> str:
+def _emphasize_context_snippet_in_body(body: str, snippet: str | None) -> str:
     """
-    Ensure the lead's saved last_message appears as **bold** in the draft, never wrapped in
-    parentheses or square brackets. Fixes model output like: ... shared (Interested).
+    Ensure a short phrase from the lead's problem/context appears as **bold** in the draft,
+    never wrapped in parentheses or square brackets.
     """
-    lm = (last_message or "").strip()
+    lm = (snippet or "").strip()
     if not lm or len(lm) < 2:
         return body
     if len(lm) > 600:
@@ -173,20 +174,20 @@ def _recent_ai_followup_bodies(db: Session, lead_id: int, limit: int = 3) -> lis
 
 
 def _conversation_context_for_lead(
-    db: Session, lead_id: int, exclude_followup_id: int
+    db: Session,
+    lead_id: int,
+    exclude_followup_id: int,
+    *,
+    problem_chunk_heading: str | None = None,
+    thread_chunk_heading: str | None = None,
 ) -> str | None:
     lead = db.get(Lead, lead_id)
+    prob_heading = (problem_chunk_heading or "").strip() or "Problem / opportunity noted (context only):"
+    thr_heading = (thread_chunk_heading or "").strip() or "Latest saved thread message (additional context):"
     chunks: list[str] = []
     if lead and getattr(lead, "problem_seen", None) and str(lead.problem_seen).strip():
         ps = str(lead.problem_seen).strip()
-        chunks.append(
-            "Problem / opportunity noted (context only):\n" + ps[:2000]
-        )
-    if lead and (lead.last_message or "").strip():
-        note = lead.last_message.strip()
-        chunks.append(
-            "Lead profile / last note (prioritize this to personalize the message):\n" + note[:4000]
-        )
+        chunks.append(prob_heading + "\n" + ps[:2000])
     q = db.query(Message).filter(Message.lead_id == lead_id)
     q = q.filter(
         or_(
@@ -197,14 +198,13 @@ def _conversation_context_for_lead(
     msg = q.order_by(Message.id.desc()).first()
     if msg and (msg.content or "").strip():
         thread_text = msg.content.strip()
-        if not (
-            lead
-            and (lead.last_message or "").strip()
-            and thread_text == (lead.last_message or "").strip()
-        ):
-            chunks.append(
-                "Latest saved thread message (additional context):\n" + thread_text[:3500]
-            )
+        ps_for_dedupe = (
+            (lead.problem_seen or "").strip()
+            if lead and getattr(lead, "problem_seen", None)
+            else ""
+        )
+        if not (ps_for_dedupe and thread_text == ps_for_dedupe):
+            chunks.append(thr_heading + "\n" + thread_text[:3500])
     if not chunks:
         return None
     return "\n\n---\n\n".join(chunks)
@@ -398,7 +398,26 @@ def _process_one_due_followup(db: Session, fu: Followup) -> None:
         db.commit()
         return
 
-    ctx = _conversation_context_for_lead(db, lead.id, fu.id)
+    tpl = (getattr(settings, "followup_ai_custom_prompt", None) or "").strip()
+    if len(tpl) < MIN_FOLLOWUP_AI_CUSTOM_PROMPT_LEN:
+        fu.status = "ai_failed"
+        fu.failure_reason = (
+            "AI follow-up body instructions are missing or too short. Open Email settings and "
+            "save the required template."
+        )
+        db.commit()
+        return
+
+    from services.merge_field_labels_service import ai_context_headings_for_workspace
+
+    headings = ai_context_headings_for_workspace(db, ws_id)
+    ctx = _conversation_context_for_lead(
+        db,
+        lead.id,
+        fu.id,
+        problem_chunk_heading=headings.problem_chunk,
+        thread_chunk_heading=headings.thread_chunk,
+    )
     prev_bodies = _recent_ai_followup_bodies(db, lead.id, 3)
     tone = random.choice(["friendly", "professional", "direct"])
     fu_type = (getattr(fu, "followup_type", None) or "normal").lower()
@@ -422,6 +441,11 @@ def _process_one_due_followup(db: Session, fu: Followup) -> None:
             lead_status=lead.status,
             lead_tag=lead.tag,
             lead_company=(lead.company or "").strip() or None,
+            lead_solution=(getattr(lead, "solution", None) or "").strip() or None,
+            problem_seen=(getattr(lead, "problem_seen", None) or "").strip() or None,
+            lead_role_title=(getattr(lead, "role_title", None) or "").strip() or None,
+            custom_prompt_template=tpl,
+            solution_internal_preface=headings.solution_internal_preface,
             ai_mode=settings.ai_mode,
             api_key=settings.api_key,
             ollama_model=om,
@@ -434,6 +458,17 @@ def _process_one_due_followup(db: Session, fu: Followup) -> None:
             lead_id=lead.id,
             followup_id=fu.id,
         )
+    except ValueError as e:
+        fu.status = "ai_failed"
+        if "followup_ai_instructions_required" in str(e):
+            fu.failure_reason = (
+                "Configure AI follow-up body instructions under Email settings (required)."
+            )
+        else:
+            fu.failure_reason = "Message generation failed. Please try again."
+        db.commit()
+        _standalone_log("AI", f"followup_id={fu.id} lead_id={lead.id} workspace={ws_id}\n{e!s}")
+        return
     except Exception as e:
         fu.status = "ai_failed"
         fu.failure_reason = "Message generation failed. Please try again."
@@ -459,9 +494,9 @@ def _process_one_due_followup(db: Session, fu: Followup) -> None:
     if stripped == (FALLBACK_FOLLOWUP_BODY or "").strip():
         nm = (lead.name or "").strip() or "there"
         co = (lead.company or "").strip()
-        lm = (lead.last_message or "").strip()
-        if lm:
-            raw = lm[:200] + ("…" if len(lm) > 200 else "")
+        prob = (getattr(lead, "problem_seen", None) or "").strip()
+        if prob:
+            raw = prob[:200] + ("…" if len(prob) > 200 else "")
             snippet = " ".join(raw.replace("*", " ").split())
             content = (
                 f"I am following up regarding what you shared — you had mentioned **{snippet}**. "
@@ -474,9 +509,10 @@ def _process_one_due_followup(db: Session, fu: Followup) -> None:
                 + " — let me know a good time to reconnect or if priorities have shifted."
             )
 
-    content = _emphasize_lead_last_message_in_body(
+    emphasize_from = (getattr(lead, "problem_seen", None) or "").strip() or None
+    content = _emphasize_context_snippet_in_body(
         (content or "").strip(),
-        lead.last_message,
+        emphasize_from,
     )
 
     msg = Message(

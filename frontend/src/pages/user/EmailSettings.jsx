@@ -1,6 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import Card from "../../components/Card";
+import {
+  DEFAULT_FOLLOWUP_AI_BODY_INSTRUCTIONS,
+  MIN_FOLLOWUP_AI_INSTRUCTIONS_LEN,
+} from "../../constants/followupAiDefaults";
 import * as userService from "../../services/userService";
 
 export default function EmailSettings() {
@@ -20,7 +24,11 @@ export default function EmailSettings() {
   const [followupOpening, setFollowupOpening] = useState("");
   const [followupClosing, setFollowupClosing] = useState("");
   const [followupSenderName, setFollowupSenderName] = useState("");
+  const [followupAiCustomPrompt, setFollowupAiCustomPrompt] = useState("");
   const [savingTemplates, setSavingTemplates] = useState(false);
+  const [portfolioAttached, setPortfolioAttached] = useState(false);
+  const [portfolioBusy, setPortfolioBusy] = useState(false);
+  const [leadMergeFields, setLeadMergeFields] = useState([]);
 
   useEffect(() => {
     let c = false;
@@ -39,6 +47,11 @@ export default function EmailSettings() {
         setFollowupOpening(s.followup_opening_line || "");
         setFollowupClosing(s.followup_closing_template || "");
         setFollowupSenderName(s.followup_sender_display_name || "");
+        const aiPrompt =
+          (s.followup_ai_custom_prompt || "").trim() || DEFAULT_FOLLOWUP_AI_BODY_INSTRUCTIONS;
+        setFollowupAiCustomPrompt(aiPrompt);
+        setPortfolioAttached(Boolean(s.portfolio_attached));
+        setLeadMergeFields(Array.isArray(s.lead_merge_fields) ? s.lead_merge_fields : []);
       } catch (e) {
         toast.error(e.message);
       } finally {
@@ -49,6 +62,19 @@ export default function EmailSettings() {
       c = true;
     };
   }, []);
+
+  const mergeFieldChips = useMemo(() => {
+    if (!leadMergeFields.length) return null;
+    return leadMergeFields.map((f, i) => (
+      <span key={f.key} title={f.description || f.label} className="inline">
+        {i > 0 ? ", " : null}
+        <code className="rounded bg-neutral-100 px-1 text-[11px] dark:bg-neutral-800">
+          {f.placeholder || `{{${f.key}}}`}
+        </code>
+        <span className="text-neutral-500"> ({f.label})</span>
+      </span>
+    ));
+  }, [leadMergeFields]);
 
   async function onSave(e) {
     e.preventDefault();
@@ -95,6 +121,13 @@ export default function EmailSettings() {
 
   async function onSaveTemplates(e) {
     e.preventDefault();
+    const ai = followupAiCustomPrompt.trim();
+    if (ai.length < MIN_FOLLOWUP_AI_INSTRUCTIONS_LEN) {
+      toast.warning(
+        `AI follow-up body instructions are required (at least ${MIN_FOLLOWUP_AI_INSTRUCTIONS_LEN} characters).`,
+      );
+      return;
+    }
     setSavingTemplates(true);
     try {
       await userService.updateSettings({
@@ -102,16 +135,21 @@ export default function EmailSettings() {
         followup_opening_line: followupOpening.trim(),
         followup_closing_template: followupClosing.trim(),
         followup_sender_display_name: followupSenderName.trim(),
+        followup_ai_custom_prompt: ai,
       });
       toast.success("Follow-up email layout saved", {
         description:
-          "Subject, greeting, and signature apply to the next automated follow-up emails.",
+          "Subject, greeting, signature, and AI body instructions apply to the next scheduled sends.",
       });
       const s2 = await userService.getSettings();
       setFollowupSubjectTpl(s2.followup_subject_template || "");
       setFollowupOpening(s2.followup_opening_line || "");
       setFollowupClosing(s2.followup_closing_template || "");
       setFollowupSenderName(s2.followup_sender_display_name || "");
+      setFollowupAiCustomPrompt(
+        (s2.followup_ai_custom_prompt || "").trim() || DEFAULT_FOLLOWUP_AI_BODY_INSTRUCTIONS,
+      );
+      setLeadMergeFields(Array.isArray(s2.lead_merge_fields) ? s2.lead_merge_fields : []);
     } catch (err) {
       toast.error(err.message || "Could not save templates.");
     } finally {
@@ -132,6 +170,45 @@ export default function EmailSettings() {
     }
   }
 
+  async function onPortfolioFile(e) {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    if (!f.name.toLowerCase().endsWith(".pdf")) {
+      toast.warning("Please choose a PDF file (max 8 MB).");
+      return;
+    }
+    setPortfolioBusy(true);
+    try {
+      const s2 = await userService.uploadPortfolioPdf(f);
+      setPortfolioAttached(Boolean(s2.portfolio_attached));
+      toast.success("Portfolio attached", {
+        description: "It is included when automated follow-up emails send via SMTP.",
+      });
+    } catch (err) {
+      toast.error(err.message || "Upload failed");
+    } finally {
+      setPortfolioBusy(false);
+    }
+  }
+
+  async function onClearPortfolio() {
+    if (!portfolioAttached) return;
+    if (!confirm("Remove the portfolio PDF? It will no longer attach to follow-up emails.")) {
+      return;
+    }
+    setPortfolioBusy(true);
+    try {
+      await userService.deletePortfolioPdf();
+      setPortfolioAttached(false);
+      toast.success("Portfolio removed");
+    } catch (err) {
+      toast.error(err.message || "Could not remove");
+    } finally {
+      setPortfolioBusy(false);
+    }
+  }
+
   return (
     <div className="w-full space-y-8 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
       <section className="w-full border-b border-neutral-200 pb-6 dark:border-neutral-800">
@@ -142,10 +219,12 @@ export default function EmailSettings() {
           Outgoing mail for your workspace
         </h1>
         <p className="mt-2 w-full text-sm text-neutral-600 dark:text-neutral-400">
-          When a scheduled follow-up time is reached, the server generates a draft. If SMTP is
-          complete below, that email is sent to the lead automatically and recorded under{" "}
+          When a scheduled follow-up time is reached, the server generates a draft using each
+          lead&apos;s <strong className="font-medium text-neutral-800 dark:text-neutral-200">Problem</strong> and{" "}
+          <strong className="font-medium text-neutral-800 dark:text-neutral-200">Solution</strong> fields (plus notes). If SMTP is
+          complete below, that email is sent automatically and logged under{" "}
           <strong className="font-medium text-neutral-800 dark:text-neutral-200">Sent mail</strong>.
-          Without SMTP, you copy the draft from Follow-ups.
+          Without SMTP, copy the draft from Follow-ups. An optional portfolio PDF below attaches only when a send happens.
         </p>
         {!loading ? (
           <p className="mt-3 text-sm text-neutral-600 dark:text-neutral-400">
@@ -275,8 +354,9 @@ export default function EmailSettings() {
           <form onSubmit={onSaveTemplates} className="max-w-2xl space-y-4">
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
               When a scheduled follow-up sends automatically, the server builds the email from: your
-              opening line, the <strong>AI-generated middle</strong> (based on each lead&apos;s last
-              note and history), then your closing. Use placeholders:{" "}
+              opening line, the <strong>AI-generated middle</strong> (from each lead&apos;s{" "}
+              <strong>Problem</strong>, <strong>Solution</strong>, and thread context), then your closing.
+              Subject/greeting/closing placeholders:{" "}
               <code className="rounded bg-neutral-100 px-1 text-xs dark:bg-neutral-800">
                 {"{{lead_name}}"}
               </code>
@@ -354,10 +434,89 @@ export default function EmailSettings() {
                 placeholder.
               </p>
             </div>
+            <div>
+              <label className="form-label">
+                AI follow-up body instructions{" "}
+                <span className="font-normal text-red-600 dark:text-red-400">(required)</span>
+              </label>
+              <p className="mb-2 text-xs text-neutral-500 dark:text-neutral-400">
+                This block is merged into the AI prompt for <strong>every</strong> scheduled follow-up.
+                Without it, the server will not generate a body. Admin can rename lead fields in{" "}
+                <strong className="font-medium text-neutral-700 dark:text-neutral-300">
+                  Admin → AI settings → Lead column labels
+                </strong>
+                ; placeholders below stay the same. Minimum {MIN_FOLLOWUP_AI_INSTRUCTIONS_LEN}{" "}
+                characters. Default example is pre-filled — edit to match your tone.
+              </p>
+              <p className="mb-2 text-xs text-neutral-600 dark:text-neutral-300">
+                Merge fields (hover for help): {mergeFieldChips || "—"}
+              </p>
+              <textarea
+                className="form-input min-h-[200px] resize-y font-mono text-sm"
+                value={followupAiCustomPrompt}
+                onChange={(e) => setFollowupAiCustomPrompt(e.target.value)}
+                disabled={savingTemplates}
+                spellCheck={false}
+                required
+              />
+              <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                Length: {followupAiCustomPrompt.trim().length} / 12000 · minimum required:{" "}
+                {MIN_FOLLOWUP_AI_INSTRUCTIONS_LEN}
+              </p>
+            </div>
             <button type="submit" disabled={savingTemplates} className="btn-primary">
               {savingTemplates ? "Saving…" : "Save email layout"}
             </button>
           </form>
+        )}
+      </Card>
+
+      <Card title="Optional portfolio (PDF)">
+        {loading ? (
+          <p className="text-neutral-500 dark:text-neutral-400">Loading…</p>
+        ) : (
+          <div className="max-w-2xl space-y-3 text-sm text-neutral-600 dark:text-neutral-400">
+            <p>
+              If you upload a PDF here, it is <strong className="text-neutral-800 dark:text-neutral-200">automatically attached</strong> when a scheduled follow-up email is sent through SMTP. If
+              nothing is uploaded, follow-ups send without an attachment.
+            </p>
+            <p className="text-xs">
+              PDF only, up to 8 MB. Recipients see it as <code className="rounded bg-neutral-100 px-1 text-[11px] dark:bg-neutral-800">Portfolio.pdf</code>.
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="inline-flex">
+                <input
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  className="hidden"
+                  disabled={portfolioBusy || saving}
+                  onChange={onPortfolioFile}
+                />
+                <span className="btn-primary cursor-pointer">
+                  {portfolioBusy ? "Working…" : portfolioAttached ? "Replace PDF" : "Upload PDF"}
+                </span>
+              </label>
+              {portfolioAttached ? (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  disabled={portfolioBusy}
+                  onClick={onClearPortfolio}
+                >
+                  Remove portfolio
+                </button>
+              ) : null}
+              {portfolioAttached ? (
+                <span className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
+                  A portfolio is on file for this workspace.
+                </span>
+              ) : (
+                <span className="text-sm text-neutral-500 dark:text-neutral-400">
+                  No portfolio on file.
+                </span>
+              )}
+            </div>
+          </div>
         )}
       </Card>
     </div>

@@ -7,6 +7,7 @@ from email.message import EmailMessage
 from email.utils import formataddr
 
 from core.paths import BACKEND_ROOT
+from services.portfolio_attachment_service import resolved_portfolio_path
 from models.lead import Lead
 from models.settings import WorkspaceSettings
 from utils.logger import get_logger
@@ -220,6 +221,19 @@ def send_followup_email(
         build_followup_html(body_plain),
         subtype="html",
     )
+
+    port_path = resolved_portfolio_path(settings_row)
+    if port_path:
+        try:
+            data = port_path.read_bytes()
+            msg.add_attachment(
+                data,
+                maintype="application",
+                subtype="pdf",
+                filename="Portfolio.pdf",
+            )
+        except OSError as e:
+            log.warning("Portfolio attachment skipped: %s", e)
 
     context = ssl.create_default_context()
     try:

@@ -8,14 +8,12 @@ import Badge from "../../components/Badge";
 import PaginationBar from "../../components/PaginationBar";
 import * as userService from "../../services/userService";
 import { countryFlagEmoji } from "../../utils/countryFlag";
-
-const STATUS_OPTIONS = [
-  { value: "new", label: "New" },
-  { value: "contacted", label: "Contacted" },
-  { value: "interested", label: "Interested" },
-  { value: "not_interested", label: "Not interested" },
-  { value: "closed", label: "Closed" },
-];
+import {
+  LEAD_STATUS_OPTIONS,
+  LEAD_TYPE_SELECT_OPTIONS,
+  leadStatusBadgeVariant,
+  leadStatusLabel,
+} from "../../utils/leadPipeline";
 
 const emptyForm = {
   name: "",
@@ -23,7 +21,6 @@ const emptyForm = {
   status: "new",
   company: "",
   phoneE164: "",
-  last_message: "",
   role_title: "",
   profile_link: "",
   agency_type: "",
@@ -32,6 +29,8 @@ const emptyForm = {
   last_active_display: "",
   connection_sent_date: "",
   replied_y_n: "",
+  solution: "",
+  lead_type: "",
 };
 
 function trunc(s, n = 48) {
@@ -70,6 +69,9 @@ export default function Leads() {
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [batchDeleting, setBatchDeleting] = useState(false);
   const [importSummary, setImportSummary] = useState(null);
+  const [solutionAiBusy, setSolutionAiBusy] = useState(false);
+  /** @type {Record<string, string>} */
+  const [mergeLabelByKey, setMergeLabelByKey] = useState({});
 
   const idsOnPage = useMemo(
     () => new Set(rows.map((r) => r.id)),
@@ -115,6 +117,30 @@ export default function Leads() {
     setSelectedIds(new Set());
   }, [page, searchQ]);
 
+  useEffect(() => {
+    let c = false;
+    userService
+      .getSettings()
+      .then((s) => {
+        if (c) return;
+        const m = {};
+        (s.lead_merge_fields || []).forEach((f) => {
+          m[f.key] = f.label;
+        });
+        setMergeLabelByKey(m);
+      })
+      .catch(() => {
+        if (!c) setMergeLabelByKey({});
+      });
+    return () => {
+      c = true;
+    };
+  }, []);
+
+  function lf(key, fallback) {
+    return mergeLabelByKey[key] || fallback;
+  }
+
   async function refreshList() {
     const data = await userService.listLeads(undefined, {
       page,
@@ -145,7 +171,6 @@ export default function Leads() {
         company: form.company.trim() || null,
         phone_number: ph.phone_number,
         country_code: ph.country_code,
-        last_message: form.last_message.trim() || null,
         role_title: form.role_title.trim() || null,
         profile_link: form.profile_link.trim() || null,
         agency_type: form.agency_type.trim() || null,
@@ -154,6 +179,8 @@ export default function Leads() {
         last_active_display: form.last_active_display.trim() || null,
         connection_sent_date: form.connection_sent_date.trim() || null,
         replied_y_n: form.replied_y_n.trim() || null,
+        solution: form.solution.trim() || null,
+        lead_type: form.lead_type?.trim() || null,
       });
       setForm(emptyForm);
       setAddOpen(false);
@@ -183,7 +210,6 @@ export default function Leads() {
         company: (editing.company || "").trim(),
         phone_number: ph.phone_number,
         country_code: ph.country_code,
-        last_message: editing.last_message?.trim() || null,
         role_title: (editing.role_title || "").trim() || null,
         profile_link: (editing.profile_link || "").trim() || null,
         agency_type: (editing.agency_type || "").trim() || null,
@@ -192,6 +218,8 @@ export default function Leads() {
         last_active_display: (editing.last_active_display || "").trim() || null,
         connection_sent_date: (editing.connection_sent_date || "").trim() || null,
         replied_y_n: (editing.replied_y_n || "").trim() || null,
+        solution: (editing.solution || "").trim() || null,
+        lead_type: editing.lead_type?.trim() || null,
       });
       setEditing(null);
       toast.success("Lead updated");
@@ -286,6 +314,47 @@ export default function Leads() {
     }
   }
 
+  async function draftSolutionWithAi(mode) {
+    const isAdd = mode === "add";
+    const problem = (
+      isAdd ? form.problem_seen : editing?.problem_seen || ""
+    ).trim();
+    if (!problem) {
+      toast.warning(
+        `Add ${lf("problem_seen", "Problem seen")} first — the AI uses that as input.`,
+      );
+      return;
+    }
+    setSolutionAiBusy(true);
+    try {
+      const body = {
+        problem_seen: problem,
+        company: (isAdd ? form.company : editing?.company || "").trim() || null,
+        role_title: (isAdd ? form.role_title : editing?.role_title || "").trim() || null,
+        lead_name: (isAdd ? form.name : editing?.name || "").trim() || null,
+      };
+      const { solution: sol } = await userService.suggestLeadSolutionFromProblem(
+        body,
+        undefined,
+      );
+      const text = (sol || "").trim();
+      if (!text) {
+        toast.warning("AI returned an empty solution — try again or edit manually.");
+        return;
+      }
+      if (isAdd) {
+        setForm((f) => ({ ...f, solution: text }));
+      } else {
+        setEditing((x) => ({ ...x, solution: text }));
+      }
+      toast.success("Solution drafted — review and adjust before saving.");
+    } catch (err) {
+      toast.error(err.message || "Could not draft solution");
+    } finally {
+      setSolutionAiBusy(false);
+    }
+  }
+
   const columns = useMemo(
     () => [
       {
@@ -309,7 +378,7 @@ export default function Leads() {
       { key: "name", label: "Name" },
       {
         key: "company",
-        label: "Company",
+        label: lf("company", "Company"),
         render: (r) => (
           <span className="max-w-[8rem] truncate text-sm text-neutral-600 dark:text-neutral-400">
             {r.company || "—"}
@@ -318,7 +387,7 @@ export default function Leads() {
       },
       {
         key: "role_title",
-        label: "Role",
+        label: lf("role_title", "Role"),
         render: (r) => (
           <span className="max-w-[7rem] truncate text-sm">{r.role_title || "—"}</span>
         ),
@@ -360,7 +429,7 @@ export default function Leads() {
       },
       {
         key: "problem_seen",
-        label: "Problem Seen",
+        label: lf("problem_seen", "Problem seen"),
         render: (r) => (
           <span className="line-clamp-2 max-w-[10rem] text-xs text-neutral-600 dark:text-neutral-400">
             {r.problem_seen || "—"}
@@ -389,9 +458,27 @@ export default function Leads() {
         ),
       },
       {
+        key: "lead_type",
+        label: "Lead type",
+        render: (r) => (
+          <span className="text-sm font-medium tabular-nums">{r.lead_type || "—"}</span>
+        ),
+      },
+      {
+        key: "solution",
+        label: lf("solution", "Solution"),
+        render: (r) => (
+          <span className="line-clamp-2 max-w-[10rem] text-xs text-neutral-600 dark:text-neutral-400">
+            {r.solution || "—"}
+          </span>
+        ),
+      },
+      {
         key: "status",
         label: "Status",
-        render: (r) => <Badge variant="muted">{r.status}</Badge>,
+        render: (r) => (
+          <Badge variant={leadStatusBadgeVariant(r.status)}>{leadStatusLabel(r.status)}</Badge>
+        ),
       },
       { key: "email", label: "Email" },
       {
@@ -430,15 +517,6 @@ export default function Leads() {
         },
       },
       {
-        key: "last_message",
-        label: "Last message",
-        render: (r) => (
-          <span className="line-clamp-2 max-w-[8rem] text-xs text-neutral-600 dark:text-neutral-400">
-            {r.last_message || "—"}
-          </span>
-        ),
-      },
-      {
         key: "actions",
         label: "",
         render: (r) => (
@@ -454,7 +532,6 @@ export default function Leads() {
                   status: r.status,
                   company: r.company || "",
                   phoneE164: r.phone_number || "",
-                  last_message: r.last_message || "",
                   role_title: r.role_title || "",
                   profile_link: r.profile_link || "",
                   agency_type: r.agency_type || "",
@@ -463,6 +540,8 @@ export default function Leads() {
                   last_active_display: r.last_active_display || "",
                   connection_sent_date: r.connection_sent_date || "",
                   replied_y_n: r.replied_y_n || "",
+                  solution: r.solution || "",
+                  lead_type: r.lead_type || "",
                 })
               }
             >
@@ -479,7 +558,7 @@ export default function Leads() {
         ),
       },
     ],
-    [selectedIds],
+    [selectedIds, mergeLabelByKey],
   );
 
   return (
@@ -496,7 +575,8 @@ export default function Leads() {
             <p className="mt-2 w-full text-sm text-neutral-600 dark:text-neutral-400">
               Table columns follow your pipeline headers (Name, Company, Role, profile link, agency
               type, etc.). Import the sample CSV or add leads manually — legacy phone+email CSV still
-              works.
+              works. Use <strong className="font-medium text-neutral-800 dark:text-neutral-200">Draft with AI</strong> on{" "}
+              {lf("solution", "Solution")} after you fill {lf("problem_seen", "Problem seen")} — scheduled follow-up emails use both for tone.
             </p>
           </div>
           <button
@@ -533,10 +613,11 @@ export default function Leads() {
           </button>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             <strong>Default format:</strong> Name, Company, Role, Profile Link, Agency Type (SEO /
-            Ads / Creative), Team Size (estimate), Problem Seen, Last Active, Connection Sent
-            (Date), Replied (Y/N), Status — <strong>email optional</strong> (auto placeholder if
-            blank). <strong>Legacy:</strong> name, email, phone, country_code (+ optional company,
-            status, notes).
+            Ads / Creative), Team Size (estimate), {lf("problem_seen", "Problem seen")}, Last Active, Connection Sent
+            (Date), Replied (Y/N), {lf("solution", "Solution")}, Lead Type (A+, A, B, C), Status —{" "}
+            <strong>email optional</strong> (auto placeholder if blank).{" "}
+            <strong>Legacy:</strong> name, email, phone, country_code (+ optional company, status,
+            notes / last_message column → stored as {lf("problem_seen", "Problem seen")}).
           </p>
         </div>
       </Card>
@@ -666,8 +747,25 @@ export default function Leads() {
                   }
                   disabled={saving}
                 >
-                  {STATUS_OPTIONS.map((o) => (
+                  {LEAD_STATUS_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="form-label">Lead type</label>
+                <select
+                  className="form-input"
+                  value={form.lead_type}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, lead_type: e.target.value }))
+                  }
+                  disabled={saving}
+                >
+                  {LEAD_TYPE_SELECT_OPTIONS.map((o) => (
+                    <option key={o.value || "none"} value={o.value}>
                       {o.label}
                     </option>
                   ))}
@@ -776,7 +874,7 @@ export default function Leads() {
                     />
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="form-label">Problem seen</label>
+                    <label className="form-label">{lf("problem_seen", "Problem seen")}</label>
                     <textarea
                       className="form-input min-h-[72px] resize-y"
                       rows={2}
@@ -788,20 +886,32 @@ export default function Leads() {
                       placeholder="What they need or objected to"
                     />
                   </div>
+                  <div className="sm:col-span-2">
+                    <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                      <label className="form-label mb-0">{lf("solution", "Solution")}</label>
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-blue-700 underline decoration-blue-400 underline-offset-2 dark:text-blue-300"
+                        disabled={saving || solutionAiBusy}
+                        onClick={() => draftSolutionWithAi("add")}
+                      >
+                        {solutionAiBusy
+                          ? "Drafting…"
+                          : `Draft with AI (from ${lf("problem_seen", "Problem seen")})`}
+                      </button>
+                    </div>
+                    <textarea
+                      className="form-input min-h-[72px] resize-y"
+                      rows={2}
+                      value={form.solution}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, solution: e.target.value }))
+                      }
+                      disabled={saving}
+                      placeholder="What you are offering / positioning"
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="sm:col-span-2">
-                <label className="form-label">Last message / note (optional)</label>
-                <textarea
-                  className="form-input min-h-[88px] resize-y"
-                  rows={3}
-                  value={form.last_message}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, last_message: e.target.value }))
-                  }
-                  disabled={saving}
-                  placeholder="e.g. They asked for pricing after the demo — used as AI context"
-                />
               </div>
               <div className="flex flex-col gap-2 sm:col-span-2 sm:flex-row">
                 <button type="submit" disabled={saving} className="btn-primary w-full sm:w-auto">
@@ -888,8 +998,24 @@ export default function Leads() {
                     setEditing((x) => ({ ...x, status: e.target.value }))
                   }
                 >
-                  {STATUS_OPTIONS.map((o) => (
+                  {LEAD_STATUS_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="form-label">Lead type</label>
+                <select
+                  className="form-input"
+                  value={editing.lead_type || ""}
+                  onChange={(e) =>
+                    setEditing((x) => ({ ...x, lead_type: e.target.value }))
+                  }
+                >
+                  {LEAD_TYPE_SELECT_OPTIONS.map((o) => (
+                    <option key={o.value || "none"} value={o.value}>
                       {o.label}
                     </option>
                   ))}
@@ -983,7 +1109,7 @@ export default function Leads() {
                     />
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="form-label">Problem seen</label>
+                    <label className="form-label">{lf("problem_seen", "Problem seen")}</label>
                     <textarea
                       className="form-input min-h-[72px] resize-y"
                       rows={2}
@@ -993,19 +1119,30 @@ export default function Leads() {
                       }
                     />
                   </div>
+                  <div className="sm:col-span-2">
+                    <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                      <label className="form-label mb-0">{lf("solution", "Solution")}</label>
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-blue-700 underline decoration-blue-400 underline-offset-2 dark:text-blue-300"
+                        disabled={saving || solutionAiBusy}
+                        onClick={() => draftSolutionWithAi("edit")}
+                      >
+                        {solutionAiBusy
+                          ? "Drafting…"
+                          : `Draft with AI (from ${lf("problem_seen", "Problem seen")})`}
+                      </button>
+                    </div>
+                    <textarea
+                      className="form-input min-h-[72px] resize-y"
+                      rows={2}
+                      value={editing.solution || ""}
+                      onChange={(e) =>
+                        setEditing((x) => ({ ...x, solution: e.target.value }))
+                      }
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="sm:col-span-2">
-                <label className="form-label">Last message / note (optional)</label>
-                <textarea
-                  className="form-input min-h-[88px] resize-y"
-                  rows={3}
-                  value={editing.last_message || ""}
-                  onChange={(e) =>
-                    setEditing((x) => ({ ...x, last_message: e.target.value }))
-                  }
-                  placeholder="Context for AI when scheduling follow-ups"
-                />
               </div>
               <div className="flex flex-col gap-2 sm:col-span-2 sm:flex-row">
                 <button type="submit" disabled={saving} className="btn-primary w-full sm:w-auto">

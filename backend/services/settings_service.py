@@ -12,6 +12,7 @@ from models.outbound_email import OutboundEmail
 from models.settings import WorkspaceSettings
 from models.workspace import Workspace
 from schemas.settings import SettingsOut, SettingsUpdate
+from services.merge_field_labels_service import resolve_merged_map, to_lead_merge_field_out_list
 from utils.smtp_errors import format_smtp_error
 
 
@@ -153,6 +154,9 @@ def get_settings_out(
         dm_replies = int(row.dashboard_manual_replies or 0)
         dm_conv = int(row.dashboard_manual_conversions or 0)
 
+    merge_map = resolve_merged_map(db, workspace_id)
+    lead_merge_fields = to_lead_merge_field_out_list(merge_map)
+
     return SettingsOut(
         workspace_id=row.workspace_id,
         ai_mode=row.ai_mode,
@@ -179,6 +183,9 @@ def get_settings_out(
         smtp_fully_configured=_smtp_configured(row),
         dashboard_manual_replies=dm_replies,
         dashboard_manual_conversions=dm_conv,
+        portfolio_attached=bool((row.portfolio_attachment_path or "").strip()),
+        followup_ai_custom_prompt=row.followup_ai_custom_prompt,
+        lead_merge_fields=lead_merge_fields,
     )
 
 
@@ -252,6 +259,8 @@ def update_user_settings(
     if data.followup_sender_display_name is not None:
         s = (data.followup_sender_display_name or "").strip()
         row.followup_sender_display_name = s or None
+    if data.followup_ai_custom_prompt is not None:
+        row.followup_ai_custom_prompt = data.followup_ai_custom_prompt.strip()
 
     if data.dashboard_manual_replies is not None or data.dashboard_manual_conversions is not None:
         if for_user_id is not None:

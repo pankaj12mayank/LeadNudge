@@ -20,3 +20,5 @@ class AppBranding(Base):
     mail_smtp_password: Mapped[str | None] = mapped_column(Text, nullable=True)
     reset_email_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
     reset_email_body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # JSON: per-key overrides for lead column labels + AI context section titles (global defaults).
+    lead_merge_field_labels_json: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -8,6 +8,9 @@ import { workspaceLabel } from "../../utils/workspaceLabel";
 
 const OLLAMA_PRESETS = ["llama3.2:latest", "mistral:latest", "gemma2:2b"];
 
+/** Merge keys that support the extra line injected into bundled AI context / solution block */
+const MERGE_CONTEXT_INTRO_KEYS = new Set(["problem_seen", "thread_message", "solution"]);
+
 /** Prefer a name that exists in `ollama list` (API /tags), else server default e.g. llama3.2:latest */
 function pickOllamaDefault(envDefault, models) {
   const def = (envDefault || "llama3.2:latest").trim() || "llama3.2:latest";
@@ -44,6 +47,15 @@ export default function AISettings() {
   const [testingOllama, setTestingOllama] = useState(false);
   const [testingOpenAi, setTestingOpenAi] = useState(false);
   const [pullingOllama, setPullingOllama] = useState(false);
+
+  const [mergeGlobalRows, setMergeGlobalRows] = useState([]);
+  const [mergeWsRows, setMergeWsRows] = useState([]);
+  const [mergeWsHasOverride, setMergeWsHasOverride] = useState(false);
+  const [mergeGlobalLoading, setMergeGlobalLoading] = useState(true);
+  const [mergeWsLoading, setMergeWsLoading] = useState(false);
+  const [mergeSaveGlobalBusy, setMergeSaveGlobalBusy] = useState(false);
+  const [mergeSaveWsBusy, setMergeSaveWsBusy] = useState(false);
+  const [mergeClearWsBusy, setMergeClearWsBusy] = useState(false);
 
   const openaiModel = site?.openai_chat_model || "gpt-4o-mini";
 
@@ -139,6 +151,144 @@ export default function AISettings() {
       c = true;
     };
   }, [workspaceId]);
+
+  function mergeRowsToFields(rows) {
+    return (rows || []).map((r) => ({
+      key: r.key,
+      label: (r.label || "").trim(),
+      description: (r.description || "").trim(),
+      context_intro: MERGE_CONTEXT_INTRO_KEYS.has(r.key)
+        ? (r.context_intro || "").trim() || null
+        : null,
+    }));
+  }
+
+  useEffect(() => {
+    let c = false;
+    (async () => {
+      setMergeGlobalLoading(true);
+      try {
+        const d = await adminService.getLeadMergeFields();
+        if (!c) setMergeGlobalRows(d.resolved || []);
+      } catch (e) {
+        if (!c) toast.error(e.message || "Could not load global merge labels");
+      } finally {
+        if (!c) setMergeGlobalLoading(false);
+      }
+    })();
+    return () => {
+      c = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!workspaceId) {
+      setMergeWsRows([]);
+      setMergeWsHasOverride(false);
+      return;
+    }
+    let c = false;
+    (async () => {
+      setMergeWsLoading(true);
+      try {
+        const d = await adminService.getLeadMergeFields(Number(workspaceId));
+        if (!c) {
+          setMergeWsRows(d.resolved || []);
+          setMergeWsHasOverride(
+            Boolean(d.workspace_override && Object.keys(d.workspace_override || {}).length),
+          );
+        }
+      } catch (e) {
+        if (!c) toast.error(e.message || "Could not load workspace merge labels");
+      } finally {
+        if (!c) setMergeWsLoading(false);
+      }
+    })();
+    return () => {
+      c = true;
+    };
+  }, [workspaceId]);
+
+  async function onSaveMergeGlobal() {
+    setMergeSaveGlobalBusy(true);
+    try {
+      await adminService.putLeadMergeFields({
+        scope: "global",
+        fields: mergeRowsToFields(mergeGlobalRows),
+      });
+      toast.success("Global lead labels saved", {
+        description: "Used for all workspaces unless a workspace has its own override.",
+      });
+      const d = await adminService.getLeadMergeFields();
+      setMergeGlobalRows(d.resolved || []);
+      if (workspaceId) {
+        const d2 = await adminService.getLeadMergeFields(Number(workspaceId));
+        setMergeWsRows(d2.resolved || []);
+        setMergeWsHasOverride(
+          Boolean(d2.workspace_override && Object.keys(d2.workspace_override || {}).length),
+        );
+      }
+    } catch (e) {
+      toast.error(e.message || "Save failed");
+    } finally {
+      setMergeSaveGlobalBusy(false);
+    }
+  }
+
+  async function onSaveMergeWorkspace() {
+    if (!workspaceId) {
+      toast.warning("Select a workspace first.");
+      return;
+    }
+    setMergeSaveWsBusy(true);
+    try {
+      await adminService.putLeadMergeFields({
+        scope: "workspace",
+        workspace_id: Number(workspaceId),
+        fields: mergeRowsToFields(mergeWsRows),
+      });
+      toast.success("Workspace label override saved", {
+        description: "Only this workspace uses these names until you clear the override.",
+      });
+      const d2 = await adminService.getLeadMergeFields(Number(workspaceId));
+      setMergeWsRows(d2.resolved || []);
+      setMergeWsHasOverride(
+        Boolean(d2.workspace_override && Object.keys(d2.workspace_override || {}).length),
+      );
+    } catch (e) {
+      toast.error(e.message || "Save failed");
+    } finally {
+      setMergeSaveWsBusy(false);
+    }
+  }
+
+  async function onClearMergeWorkspace() {
+    if (!workspaceId) return;
+    if (
+      !confirm(
+        "Remove workspace-specific labels? This workspace will follow the global defaults.",
+      )
+    ) {
+      return;
+    }
+    setMergeClearWsBusy(true);
+    try {
+      await adminService.putLeadMergeFields({
+        scope: "workspace",
+        workspace_id: Number(workspaceId),
+        clear_workspace_override: true,
+        fields: [],
+      });
+      toast.success("Workspace label override cleared");
+      const d2 = await adminService.getLeadMergeFields(Number(workspaceId));
+      setMergeWsRows(d2.resolved || []);
+      setMergeWsHasOverride(false);
+    } catch (e) {
+      toast.error(e.message || "Could not clear override");
+    } finally {
+      setMergeClearWsBusy(false);
+    }
+  }
 
   async function onTestOllama() {
     const m = ollamaTrimmed || null;
@@ -543,6 +693,231 @@ export default function AISettings() {
               Save
             </button>
           </form>
+        )}
+      </Card>
+
+      <Card title="Lead column labels &amp; AI merge fields">
+        <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
+          Global defaults apply to every workspace. You can override labels for the workspace
+          selected above; portal Leads and follow-up AI context headings read these values on each
+          request. Template placeholders stay the same (
+          <code className="text-xs">{"{{problem_seen}}"}</code>,{" "}
+          <code className="text-xs">{"{{solution}}"}</code>, …).
+        </p>
+
+        <h3 className="mb-2 text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+          Global defaults
+        </h3>
+        {mergeGlobalLoading ? (
+          <p className="text-sm text-neutral-500 dark:text-neutral-400">Loading…</p>
+        ) : (
+          <div className="mb-6 max-h-80 overflow-auto rounded-md border border-neutral-200 dark:border-neutral-700">
+            <table className="min-w-full border-collapse text-sm">
+              <thead className="sticky top-0 bg-neutral-50 dark:bg-neutral-900">
+                <tr>
+                  <th className="border-b border-neutral-200 p-2 text-left dark:border-neutral-700">
+                    Key
+                  </th>
+                  <th className="border-b border-neutral-200 p-2 text-left dark:border-neutral-700">
+                    Placeholder
+                  </th>
+                  <th className="border-b border-neutral-200 p-2 text-left dark:border-neutral-700">
+                    Label
+                  </th>
+                  <th className="border-b border-neutral-200 p-2 text-left dark:border-neutral-700">
+                    Description
+                  </th>
+                  <th className="border-b border-neutral-200 p-2 text-left dark:border-neutral-700">
+                    AI context heading
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {mergeGlobalRows.map((r) => (
+                  <tr key={r.key} className="border-b border-neutral-100 dark:border-neutral-800">
+                    <td className="p-2 font-mono text-xs text-neutral-600 dark:text-neutral-400">
+                      {r.key}
+                    </td>
+                    <td className="p-2 font-mono text-xs">{r.placeholder}</td>
+                    <td className="p-2">
+                      <input
+                        className="form-input max-w-[10rem] text-sm"
+                        value={r.label}
+                        onChange={(e) =>
+                          setMergeGlobalRows((rows) =>
+                            rows.map((x) =>
+                              x.key === r.key ? { ...x, label: e.target.value } : x,
+                            ),
+                          )
+                        }
+                        disabled={mergeSaveGlobalBusy}
+                      />
+                    </td>
+                    <td className="p-2">
+                      <input
+                        className="form-input max-w-[14rem] text-xs"
+                        value={r.description || ""}
+                        onChange={(e) =>
+                          setMergeGlobalRows((rows) =>
+                            rows.map((x) =>
+                              x.key === r.key ? { ...x, description: e.target.value } : x,
+                            ),
+                          )
+                        }
+                        disabled={mergeSaveGlobalBusy}
+                      />
+                    </td>
+                    <td className="p-2">
+                      {MERGE_CONTEXT_INTRO_KEYS.has(r.key) ? (
+                        <textarea
+                          className="form-input min-h-[3rem] w-56 resize-y font-mono text-xs"
+                          value={r.context_intro || ""}
+                          onChange={(e) =>
+                            setMergeGlobalRows((rows) =>
+                              rows.map((x) =>
+                                x.key === r.key ? { ...x, context_intro: e.target.value } : x,
+                              ),
+                            )
+                          }
+                          disabled={mergeSaveGlobalBusy}
+                          spellCheck={false}
+                        />
+                      ) : (
+                        <span className="text-xs text-neutral-400">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <button
+          type="button"
+          className="btn-primary"
+          disabled={mergeGlobalLoading || mergeSaveGlobalBusy}
+          onClick={onSaveMergeGlobal}
+        >
+          {mergeSaveGlobalBusy ? "Saving…" : "Save global labels"}
+        </button>
+
+        <h3 className="mb-2 mt-8 text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+          Selected workspace (effective labels)
+        </h3>
+        {!workspaceId ? (
+          <p className="text-sm text-neutral-500 dark:text-neutral-400">Pick a workspace above.</p>
+        ) : mergeWsLoading ? (
+          <p className="text-sm text-neutral-500 dark:text-neutral-400">Loading…</p>
+        ) : (
+          <>
+            {mergeWsHasOverride ? (
+              <p className="mb-2 text-xs font-medium text-amber-800 dark:text-amber-200">
+                This workspace has a custom override (not only global defaults).
+              </p>
+            ) : (
+              <p className="mb-2 text-xs text-neutral-500 dark:text-neutral-400">
+                No workspace override — showing global effective labels.
+              </p>
+            )}
+            <div className="mb-3 max-h-80 overflow-auto rounded-md border border-neutral-200 dark:border-neutral-700">
+              <table className="min-w-full border-collapse text-sm">
+                <thead className="sticky top-0 bg-neutral-50 dark:bg-neutral-900">
+                  <tr>
+                    <th className="border-b border-neutral-200 p-2 text-left dark:border-neutral-700">
+                      Key
+                    </th>
+                    <th className="border-b border-neutral-200 p-2 text-left dark:border-neutral-700">
+                      Placeholder
+                    </th>
+                    <th className="border-b border-neutral-200 p-2 text-left dark:border-neutral-700">
+                      Label
+                    </th>
+                    <th className="border-b border-neutral-200 p-2 text-left dark:border-neutral-700">
+                      Description
+                    </th>
+                    <th className="border-b border-neutral-200 p-2 text-left dark:border-neutral-700">
+                      AI context heading
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {mergeWsRows.map((r) => (
+                    <tr key={r.key} className="border-b border-neutral-100 dark:border-neutral-800">
+                      <td className="p-2 font-mono text-xs text-neutral-600 dark:text-neutral-400">
+                        {r.key}
+                      </td>
+                      <td className="p-2 font-mono text-xs">{r.placeholder}</td>
+                      <td className="p-2">
+                        <input
+                          className="form-input max-w-[10rem] text-sm"
+                          value={r.label}
+                          onChange={(e) =>
+                            setMergeWsRows((rows) =>
+                              rows.map((x) =>
+                                x.key === r.key ? { ...x, label: e.target.value } : x,
+                              ),
+                            )
+                          }
+                          disabled={mergeSaveWsBusy || mergeClearWsBusy}
+                        />
+                      </td>
+                      <td className="p-2">
+                        <input
+                          className="form-input max-w-[14rem] text-xs"
+                          value={r.description || ""}
+                          onChange={(e) =>
+                            setMergeWsRows((rows) =>
+                              rows.map((x) =>
+                                x.key === r.key ? { ...x, description: e.target.value } : x,
+                              ),
+                            )
+                          }
+                          disabled={mergeSaveWsBusy || mergeClearWsBusy}
+                        />
+                      </td>
+                      <td className="p-2">
+                        {MERGE_CONTEXT_INTRO_KEYS.has(r.key) ? (
+                          <textarea
+                            className="form-input min-h-[3rem] w-56 resize-y font-mono text-xs"
+                            value={r.context_intro || ""}
+                            onChange={(e) =>
+                              setMergeWsRows((rows) =>
+                                rows.map((x) =>
+                                  x.key === r.key ? { ...x, context_intro: e.target.value } : x,
+                                ),
+                              )
+                            }
+                            disabled={mergeSaveWsBusy || mergeClearWsBusy}
+                            spellCheck={false}
+                          />
+                        ) : (
+                          <span className="text-xs text-neutral-400">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={mergeSaveWsBusy || mergeClearWsBusy}
+                onClick={onSaveMergeWorkspace}
+              >
+                {mergeSaveWsBusy ? "Saving…" : "Save override for this workspace"}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={!mergeWsHasOverride || mergeSaveWsBusy || mergeClearWsBusy}
+                onClick={onClearMergeWorkspace}
+              >
+                {mergeClearWsBusy ? "Clearing…" : "Remove workspace override"}
+              </button>
+            </div>
+          </>
         )}
       </Card>
     </div>

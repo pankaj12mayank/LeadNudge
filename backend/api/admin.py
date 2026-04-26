@@ -67,8 +67,10 @@ from schemas.user import (
     UserCreate,
     UserOut,
 )
+from schemas.merge_field_labels import AdminLeadMergeFieldsOut, AdminLeadMergeFieldsPut
 from schemas.workspace import WorkspaceOut, WorkspacePlanUpdate
 from services import admin_service, admin_account_service, branding_service
+from services import merge_field_labels_service
 from services import usage_history_service
 from services import password_request_service, template_mail_service
 from services.settings_service import get_settings_out
@@ -85,6 +87,48 @@ from utils.smtp_errors import format_smtp_error
 log = get_logger("admin")
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+@router.get("/lead-merge-fields", response_model=AdminLeadMergeFieldsOut)
+def admin_get_lead_merge_fields(
+    principal: Annotated[Principal, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+    workspace_id: int | None = Query(default=None),
+) -> AdminLeadMergeFieldsOut:
+    _ = principal
+    return merge_field_labels_service.admin_lead_merge_fields_out(db, workspace_id)
+
+
+@router.put("/lead-merge-fields", response_model=AdminLeadMergeFieldsOut)
+def admin_put_lead_merge_fields(
+    body: AdminLeadMergeFieldsPut,
+    principal: Annotated[Principal, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> AdminLeadMergeFieldsOut:
+    _ = principal
+    if body.clear_workspace_override:
+        if body.workspace_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="workspace_id is required to clear a workspace override.",
+            )
+        merge_field_labels_service.clear_workspace_override(db, body.workspace_id)
+        return merge_field_labels_service.admin_lead_merge_fields_out(db, body.workspace_id)
+    if not body.fields:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="fields is required unless clear_workspace_override is true.",
+        )
+    if body.scope == "global":
+        merge_field_labels_service.save_global_labels(db, body.fields)
+        return merge_field_labels_service.admin_lead_merge_fields_out(db, None)
+    if body.workspace_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="workspace_id is required when scope is workspace.",
+        )
+    merge_field_labels_service.save_workspace_override(db, body.workspace_id, body.fields)
+    return merge_field_labels_service.admin_lead_merge_fields_out(db, body.workspace_id)
 
 
 def _guard_admin_vs_same_email_user(

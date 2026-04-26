@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from api.deps import Principal, get_principal, require_admin
@@ -8,6 +8,10 @@ from db.session import get_db
 from schemas.admin_profile import MailTestRequest
 from schemas.settings import SettingsOut, SettingsUpdate, SmtpTestResult
 from services import branding_service
+from services.portfolio_attachment_service import (
+    clear_workspace_portfolio,
+    save_workspace_portfolio,
+)
 from services.settings_service import (
     get_settings_out,
     test_smtp_connection,
@@ -119,6 +123,50 @@ def post_smtp_test(
         )
     ok, msg = test_smtp_connection(db, principal.workspace_id)
     return SmtpTestResult(ok=ok, message=msg)
+
+
+@router.post("/portfolio", response_model=SettingsOut)
+async def post_settings_portfolio(
+    principal: Annotated[Principal, Depends(get_principal)],
+    db: Annotated[Session, Depends(get_db)],
+    file: UploadFile = File(...),
+) -> SettingsOut:
+    """Optional PDF attached to AI follow-up emails when SMTP sends. Workspace users only."""
+    if principal.role != "user":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only workspace users can upload a portfolio from this screen",
+        )
+    if principal.workspace_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session",
+        )
+    await save_workspace_portfolio(db, principal.workspace_id, file)
+    return get_settings_out(
+        db,
+        principal.workspace_id,
+        mask_api_key=True,
+        for_user_id=principal.user_id,
+    )
+
+
+@router.delete("/portfolio", status_code=204)
+def delete_settings_portfolio(
+    principal: Annotated[Principal, Depends(get_principal)],
+    db: Annotated[Session, Depends(get_db)],
+) -> None:
+    if principal.role != "user":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only workspace users can remove the portfolio",
+        )
+    if principal.workspace_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session",
+        )
+    clear_workspace_portfolio(db, principal.workspace_id)
 
 
 @router.post("/test-email", response_model=SmtpTestResult)

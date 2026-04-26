@@ -268,3 +268,18 @@ export async function pullOllamaModel(model) {
   const { data } = await api.post("/admin/ollama/pull", { model });
   return data;
 }
+
+/** @param {number|undefined|null} workspaceId - omit for global-only merge config */
+export async function getLeadMergeFields(workspaceId) {
+  const params = {};
+  if (workspaceId != null && workspaceId !== "") {
+    params.workspace_id = workspaceId;
+  }
+  const { data } = await api.get("/admin/lead-merge-fields", { params });
+  return data;
+}
+
+export async function putLeadMergeFields(payload) {
+  const { data } = await api.put("/admin/lead-merge-fields", payload);
+  return data;
+}

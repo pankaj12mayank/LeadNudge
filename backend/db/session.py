@@ -496,12 +496,54 @@ def init_db() -> None:
         postgres_ddl="ALTER TABLE leads ADD COLUMN IF NOT EXISTS replied_y_n VARCHAR(8)",
     )
     _ensure_column_if_missing(
+        "leads",
+        "solution",
+        sqlite_ddl="ALTER TABLE leads ADD COLUMN solution TEXT",
+        postgres_ddl="ALTER TABLE leads ADD COLUMN IF NOT EXISTS solution TEXT",
+    )
+    _ensure_column_if_missing(
+        "leads",
+        "lead_type",
+        sqlite_ddl="ALTER TABLE leads ADD COLUMN lead_type VARCHAR(8)",
+        postgres_ddl="ALTER TABLE leads ADD COLUMN IF NOT EXISTS lead_type VARCHAR(8)",
+    )
+    _ensure_column_if_missing(
         "followups",
         "followup_type",
         sqlite_ddl="ALTER TABLE followups ADD COLUMN followup_type VARCHAR(16) DEFAULT 'normal' NOT NULL",
         postgres_ddl=(
             "ALTER TABLE followups ADD COLUMN IF NOT EXISTS followup_type VARCHAR(16) "
             "DEFAULT 'normal' NOT NULL"
+        ),
+    )
+    _ensure_column_if_missing(
+        "settings",
+        "portfolio_attachment_path",
+        sqlite_ddl="ALTER TABLE settings ADD COLUMN portfolio_attachment_path VARCHAR(512)",
+        postgres_ddl=(
+            "ALTER TABLE settings ADD COLUMN IF NOT EXISTS portfolio_attachment_path VARCHAR(512)"
+        ),
+    )
+    _ensure_column_if_missing(
+        "settings",
+        "followup_ai_custom_prompt",
+        sqlite_ddl="ALTER TABLE settings ADD COLUMN followup_ai_custom_prompt TEXT",
+        postgres_ddl="ALTER TABLE settings ADD COLUMN IF NOT EXISTS followup_ai_custom_prompt TEXT",
+    )
+    _ensure_column_if_missing(
+        "settings",
+        "lead_merge_field_labels_override_json",
+        sqlite_ddl="ALTER TABLE settings ADD COLUMN lead_merge_field_labels_override_json TEXT",
+        postgres_ddl=(
+            "ALTER TABLE settings ADD COLUMN IF NOT EXISTS lead_merge_field_labels_override_json TEXT"
+        ),
+    )
+    _ensure_column_if_missing(
+        "app_branding",
+        "lead_merge_field_labels_json",
+        sqlite_ddl="ALTER TABLE app_branding ADD COLUMN lead_merge_field_labels_json TEXT",
+        postgres_ddl=(
+            "ALTER TABLE app_branding ADD COLUMN IF NOT EXISTS lead_merge_field_labels_json TEXT"
         ),
     )
     _ensure_column_if_missing(
@@ -683,5 +725,8 @@ def init_db() -> None:
     try:
         admin_service.ensure_fixed_workspaces(db)
         ensure_default_templates(db)
+        from services.followup_ai_seed import seed_followup_ai_defaults
+
+        seed_followup_ai_defaults(db)
     finally:
         db.close()

@@ -20,7 +20,6 @@ class Lead(Base):
     tag: Mapped[str | None] = mapped_column(String(128), nullable=True)
     phone_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
     country_code: Mapped[str | None] = mapped_column(String(8), nullable=True)
-    last_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     company: Mapped[str | None] = mapped_column(String(255), nullable=True)
     temperature_tag: Mapped[str | None] = mapped_column(
         String(16), nullable=True, index=True
@@ -38,6 +37,8 @@ class Lead(Base):
     last_active_display: Mapped[str | None] = mapped_column(String(128), nullable=True)
     connection_sent_date: Mapped[str | None] = mapped_column(String(128), nullable=True)
     replied_y_n: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    solution: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lead_type: Mapped[str | None] = mapped_column(String(8), nullable=True)
     # Portal users only see leads they own; NULL = admin-visible only (unassigned legacy).
     owner_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"),

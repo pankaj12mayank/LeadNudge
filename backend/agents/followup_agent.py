@@ -1,7 +1,33 @@
+"""
+Follow-up email *body* (middle paragraphs only) is built here.
+
+- Main instructions and the assembled `prompt` live in `generate_followup()` below.
+- That prompt is sent through `ai_router()` → `agents/ai_router.py` (Ollama or OpenAI).
+- Lead-specific context (problem, thread, solution brief) is assembled in
+  `services/followup_service.py` → `_conversation_context_for_lead()` and passed as
+  `last_context`, plus `lead_solution` on this agent.
+
+Workspace-specific instructions: save **AI follow-up body instructions** under Email settings
+(portal). They are required for generation. Placeholders include {{problem_seen}}, {{solution}},
+{{context}}, {{lead_name}}, {{lead_email}}, {{lead_status}}, {{tag}}, {{company}}, {{role_title}}.
+Admin can rename how these appear in the product under AI / merge-field settings.
+
+You can still edit the default `prompt` string in `generate_followup` for product-wide behavior.
+Subject / greeting / signature: Email settings (SMTP templates).
+"""
+
 import hashlib
 import random
 
 from agents.ai_router import ai_router
+
+
+def _fill_followup_prompt_template(template: str, variables: dict[str, str]) -> str:
+    out = template
+    for key, val in variables.items():
+        out = out.replace("{{" + key + "}}", val)
+        out = out.replace("{" + key + "}", val)
+    return out
 
 
 def generate_followup(
@@ -11,6 +37,11 @@ def generate_followup(
     lead_status: str,
     lead_tag: str | None,
     lead_company: str | None = None,
+    lead_solution: str | None = None,
+    problem_seen: str | None = None,
+    lead_role_title: str | None = None,
+    custom_prompt_template: str | None = None,
+    solution_internal_preface: str | None = None,
     ai_mode: str,
     api_key: str | None,
     ollama_model: str | None = None,
@@ -23,7 +54,14 @@ def generate_followup(
     lead_id: int = 0,
     followup_id: int = 0,
 ) -> str:
+    if not (custom_prompt_template or "").strip():
+        raise ValueError(
+            "followup_ai_instructions_required: configure AI follow-up body instructions "
+            "under Email settings (required)."
+        )
+
     tag = lead_tag or "none"
+    sol_text = (lead_solution or "").strip()
     ctx_block = ""
     if last_context and last_context.strip():
         ctx_block = (
@@ -54,6 +92,17 @@ def generate_followup(
     company_line = ""
     if lead_company and str(lead_company).strip():
         company_line = f"Company / org (context only): {str(lead_company).strip()}\n"
+
+    sol_preface = (
+        (solution_internal_preface or "").strip()
+        or (
+            "What we can offer / how we usually help (internal brief — weave naturally; "
+            "do not paste as marketing copy or a feature list):"
+        )
+    )
+    solution_line = ""
+    if sol_text:
+        solution_line = f"{sol_preface}\n{sol_text[:2500]}\n\n"
 
     kind = (message_kind or "followup_reminder").strip().lower()
     kind_instructions = {
@@ -119,11 +168,36 @@ def generate_followup(
         else "Keep the body specific to this person's name, status, and company context only."
     )
 
+    tpl = (custom_prompt_template or "").strip()
+    custom_injected = ""
+    if tpl:
+        vars_map = {
+            "problem_seen": (problem_seen or "").strip(),
+            "solution": sol_text,
+            "context": (last_context or "").strip(),
+            "lead_name": (lead_name or "").strip(),
+            "lead_email": (lead_email or "").strip(),
+            "lead_status": (lead_status or "").strip(),
+            "tag": tag,
+            "company": (lead_company or "").strip(),
+            "role_title": (lead_role_title or "").strip(),
+        }
+        filled = _fill_followup_prompt_template(tpl, vars_map).strip()
+        if filled:
+            custom_injected = (
+                "**Your workspace instructions (highest priority — still obey formatting rules "
+                "below: no salutation/sign-off, plain text body only):**\n"
+                f"{filled[:8000]}\n\n"
+            )
+
     prompt = (
         "You are writing the middle only of a follow-up email (the main paragraphs). "
         "A greeting line (e.g. Hi Name,) and a signature block will be added automatically "
         "by the system — do not include Hi/Hello/Dear, do not include "
         "Best regards / Thanks / your name / sign-off.\n\n"
+        f"{custom_injected}"
+        "Tone: sound like a thoughtful colleague — acknowledge their situation, be concrete from "
+        "context, helpful without a hard sell or hype. No pressure tactics.\n\n"
         f"Use a {tone_pick} tone: "
         + (
             "warm and conversational."
@@ -153,6 +227,7 @@ def generate_followup(
         f"Pipeline status: {lead_status}\n"
         f"Tag: {tag}\n"
         f"{company_line}\n"
+        f"{solution_line}"
         f"{prev_block}"
         f"{ctx_block}"
         "Output only the middle paragraphs (plain text), following the bold rules above."

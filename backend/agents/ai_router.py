@@ -334,15 +334,23 @@ def run_ollama(
     *,
     allow_fallback: bool = True,
     raise_on_failure: bool = False,
+    failure_fallback: str | None = None,
 ) -> str:
     """
     Ollama: POST /api/generate then /api/chat fallback, stream=false.
     Retries once per endpoint; optional default model then safe template body.
+    failure_fallback: if not None, returned on hard failure instead of FALLBACK_FOLLOWUP_BODY
+    (use \"\" for non-follow-up calls like solution drafting).
     """
     m = resolve_ollama_model(model)
     default_m = _sanitize_model_name(
         (settings.ollama_model or "llama3.2:latest").strip()
     )
+
+    def _failure_text() -> str:
+        if failure_fallback is not None:
+            return failure_fallback
+        return FALLBACK_FOLLOWUP_BODY or ""
 
     def _try(mm: str) -> str:
         return _ollama_generate_once(prompt, mm)
@@ -359,12 +367,12 @@ def run_ollama(
                 if raise_on_failure:
                     raise RuntimeError(str(e2)) from e2
                 _log_ai_fallback_to_db(str(e2)[:500], default_m)
-                return FALLBACK_FOLLOWUP_BODY
+                return _failure_text()
         if raise_on_failure:
             raise RuntimeError(str(e)) from e
         log.warning("Ollama failed; fallback body. Cause: %s", e)
         _log_ai_fallback_to_db(str(e)[:500], m)
-        return FALLBACK_FOLLOWUP_BODY
+        return _failure_text()
 
 
 def test_openai_key(api_key: str) -> tuple[bool, str, str | None]:
@@ -438,14 +446,21 @@ def ai_router(
     api_key: str | None,
     ollama_model: str | None = None,
     workspace_plan: str = "free",
+    failure_fallback: str | None = None,
 ) -> str:
     """
-    Production path: never raises — returns draft text or FALLBACK_FOLLOWUP_BODY.
+    Production path: never raises — returns draft text or FALLBACK_FOLLOWUP_BODY
+    (unless failure_fallback is set, e.g. \"\" for solution drafting).
     Free workspaces always use Ollama; OpenAI only when plan is pro and mode/key allow it.
     """
     force_local = (settings.mode or "local").strip().lower() == "local"
     if force_local:
-        return run_ollama(prompt, model=ollama_model, raise_on_failure=False)
+        return run_ollama(
+            prompt,
+            model=ollama_model,
+            raise_on_failure=False,
+            failure_fallback=failure_fallback,
+        )
 
     plan = (workspace_plan or "free").strip().lower()
     allow_openai = plan == "pro"
@@ -461,5 +476,10 @@ def ai_router(
                 return out
         except Exception as e:
             log.warning("OpenAI failed, falling back to Ollama/fallback: %s", e)
-    return run_ollama(prompt, model=ollama_model, raise_on_failure=False)
+    return run_ollama(
+        prompt,
+        model=ollama_model,
+        raise_on_failure=False,
+        failure_fallback=failure_fallback,
+    )
 

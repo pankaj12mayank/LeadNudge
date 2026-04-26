@@ -35,6 +35,14 @@ class WorkspaceSettings(Base):
     )
     usage_email_90_sent: Mapped[bool] = mapped_column(default=False, nullable=False)
     usage_email_limit_sent: Mapped[bool] = mapped_column(default=False, nullable=False)
+    # Relative to UPLOAD_DIR, e.g. portfolios/ws_3/file.pdf — optional follow-up attachment.
+    portfolio_attachment_path: Mapped[str | None] = mapped_column(
+        String(512), nullable=True
+    )
+    # Required workspace template merged into follow-up AI prompt (see followup_agent placeholders).
+    followup_ai_custom_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # JSON: optional per-workspace overrides over global merge-field labels (see merge_field_labels_service).
+    lead_merge_field_labels_override_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     workspace: Mapped["Workspace"] = relationship(
         "Workspace", back_populates="settings_row"

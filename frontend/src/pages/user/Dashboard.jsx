@@ -12,14 +12,11 @@ import {
   SESSION_QUOTA_TOAST_KEY,
 } from "../../utils/constants";
 import { formatScheduleDisplay } from "../../utils/formatSchedule";
+import { LEAD_STATUS_FILTER_OPTIONS } from "../../utils/leadPipeline";
 
-const STATUS_OPTIONS = [
+const DASH_STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
-  { value: "new", label: "New" },
-  { value: "contacted", label: "Contacted" },
-  { value: "interested", label: "Interested" },
-  { value: "not_interested", label: "Not interested" },
-  { value: "closed", label: "Closed" },
+  ...LEAD_STATUS_FILTER_OPTIONS,
 ];
 
 function temperatureVariant(tag) {
@@ -319,7 +316,7 @@ export default function Dashboard() {
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >
-              {STATUS_OPTIONS.map((o) => (
+              {DASH_STATUS_OPTIONS.map((o) => (
                 <option key={o.value || "all"} value={o.value}>
                   {o.label}
                 </option>
