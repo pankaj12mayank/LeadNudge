@@ -1,6 +1,6 @@
 # CI/CD: zero → production deploy guide
 
-This document is a **practical plan** to take **AI Sales Agent** from “changes on your laptop” to **repeatable deploys** on a live server. Adapt names (domain, user, paths) to your environment.
+This document is a **practical plan** to take **LeadNudge** from “changes on your laptop” to **repeatable deploys** on a live server. Adapt names (domain, user, paths) to your environment.
 
 ## What you are automating
 
@@ -29,10 +29,10 @@ This document is a **practical plan** to take **AI Sales Agent** from “changes
 Suggested paths (as `deploy` user or your choice):
 
 ```text
-/opt/ai-sales-agent/          # git clone / release directory
-/opt/ai-sales-agent/.venv/    # Python virtualenv
-/opt/ai-sales-agent/backend/.env
-/opt/ai-sales-agent/frontend/dist/   # after build
+/opt/LeadNudge/               # git clone / release directory
+/opt/LeadNudge/.venv/         # Python virtualenv
+/opt/LeadNudge/backend/.env
+/opt/LeadNudge/frontend/dist/ # after build
 ```
 
 **Environment files (not in git):**
@@ -60,9 +60,9 @@ sudo apt install -y python3.11 python3.11-venv nginx certbot python3-certbot-ngi
 
 ```bash
 cd /opt
-sudo git clone https://github.com/YOUR_ORG/ai-sales-agent.git
-sudo chown -R $USER:$USER ai-sales-agent
-cd ai-sales-agent
+sudo git clone https://github.com/YOUR_ORG/LeadNudge.git
+sudo chown -R $USER:$USER LeadNudge
+cd LeadNudge
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -U pip
@@ -82,19 +82,19 @@ npm run build
 
 ### 2.4 Process manager (systemd) — API
 
-Example `/etc/systemd/system/ai-sales-api.service`:
+Example `/etc/systemd/system/leadnudge-api.service`:
 
 ```ini
 [Unit]
-Description=AI Sales Agent API
+Description=LeadNudge API
 After=network.target
 
 [Service]
 Type=simple
 User=deploy
-WorkingDirectory=/opt/ai-sales-agent/backend
-Environment=PATH=/opt/ai-sales-agent/.venv/bin
-ExecStart=/opt/ai-sales-agent/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000
+WorkingDirectory=/opt/LeadNudge/backend
+Environment=PATH=/opt/LeadNudge/.venv/bin
+ExecStart=/opt/LeadNudge/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=5
 
@@ -106,7 +106,7 @@ Then:
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now ai-sales-api.service
+sudo systemctl enable --now leadnudge-api.service
 ```
 
 *(If your app uses `run_prod.py`, point `ExecStart` to that instead; keep API bound to `127.0.0.1` and put TLS on nginx/Caddy.)*
@@ -138,7 +138,7 @@ Add `.github/workflows/deploy.yml` when ready. **Do not commit secrets** — use
 | `SSH_PRIVATE_KEY` | Deploy user’s ed25519/RSA private key |
 | `SSH_HOST` | Server hostname or IP |
 | `SSH_USER` | e.g. `deploy` |
-| `DEPLOY_PATH` | e.g. `/opt/ai-sales-agent` |
+| `DEPLOY_PATH` | e.g. `/opt/LeadNudge` |
 | `VITE_API_URL` | e.g. `https://api.example.com` (for build) |
 
 ### 3.2 Workflow outline (conceptual)
@@ -146,7 +146,7 @@ Add `.github/workflows/deploy.yml` when ready. **Do not commit secrets** — use
 1. **Trigger:** `push` to `main` (or `release` tags).
 2. **Job `test`:** checkout → Python venv → `pip install -r backend/requirements.txt` → `pytest` in `backend/`.
 3. **Job `build-frontend`:** `npm ci` in `frontend/` → create `.env.production` with `VITE_API_URL` from secret → `npm run build` → upload `frontend/dist` as artifact.
-4. **Job `deploy`:** needs `test` + `build-frontend` → SSH to server → `git pull` (or rsync tarball) → `pip install -r backend/requirements.txt` → copy new `dist/` → `sudo systemctl restart ai-sales-api` → optional `nginx -s reload`.
+4. **Job `deploy`:** needs `test` + `build-frontend` → SSH to server → `git pull` (or rsync tarball) → `pip install -r backend/requirements.txt` → copy new `dist/` → `sudo systemctl restart leadnudge-api` → optional `nginx -s reload`.
 
 Use `appleboy/ssh-action` or `rsync` over SSH; pin action versions by commit SHA in real repos.
 
@@ -204,7 +204,7 @@ jobs:
 2. **Database:** SQLite — back up `app.db` before deploy (`cp backend/app.db backend/app.db.bak`). For Postgres, use `pg_dump` on a schedule.
 3. **Rollback:** keep previous `dist/` tarball or previous git tag; `systemctl restart` after `git checkout <tag>`.
 4. **Smoke test after deploy:** open login, `/auth/me` as user, one read-only API check.
-5. **Logs:** `journalctl -u ai-sales-api -f` on the server.
+5. **Logs:** `journalctl -u leadnudge-api -f` on the server.
 
 ---
 

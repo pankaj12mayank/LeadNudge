@@ -1,5 +1,6 @@
 import csv
 import io
+import uuid
 from datetime import datetime, timezone
 from typing import BinaryIO
 
@@ -115,7 +116,20 @@ def list_leads(
     if search and search.strip():
         term = f"%{search.strip()}%"
         q = q.filter(
-            or_(Lead.name.ilike(term), Lead.email.ilike(term))
+            or_(
+                Lead.name.ilike(term),
+                Lead.email.ilike(term),
+                Lead.company.ilike(term),
+                Lead.role_title.ilike(term),
+                Lead.profile_link.ilike(term),
+                Lead.agency_type.ilike(term),
+                Lead.team_size_estimate.ilike(term),
+                Lead.problem_seen.ilike(term),
+                Lead.last_active_display.ilike(term),
+                Lead.connection_sent_date.ilike(term),
+                Lead.replied_y_n.ilike(term),
+                Lead.last_message.ilike(term),
+            )
         )
     total = q.count()
     page = PaginationParams.clamp_page(page)
@@ -143,6 +157,14 @@ def create_lead(
         country_code=data.country_code,
         company=co,
         last_message=lm,
+        role_title=(data.role_title or "").strip() or None,
+        profile_link=(data.profile_link or "").strip() or None,
+        agency_type=(data.agency_type or "").strip() or None,
+        team_size_estimate=(data.team_size_estimate or "").strip() or None,
+        problem_seen=(data.problem_seen or "").strip() or None,
+        last_active_display=(data.last_active_display or "").strip() or None,
+        connection_sent_date=(data.connection_sent_date or "").strip() or None,
+        replied_y_n=(data.replied_y_n or "").strip() or None,
         workspace_id=workspace_id,
         temperature_tag="hot",
         owner_user_id=owner_user_id,
@@ -185,6 +207,22 @@ def update_lead(
         lead.company = (data.company or "").strip() or None
     if data.last_message is not None:
         lead.last_message = (data.last_message or "").strip() or None
+    if data.role_title is not None:
+        lead.role_title = (data.role_title or "").strip() or None
+    if data.profile_link is not None:
+        lead.profile_link = (data.profile_link or "").strip() or None
+    if data.agency_type is not None:
+        lead.agency_type = (data.agency_type or "").strip() or None
+    if data.team_size_estimate is not None:
+        lead.team_size_estimate = (data.team_size_estimate or "").strip() or None
+    if data.problem_seen is not None:
+        lead.problem_seen = (data.problem_seen or "").strip() or None
+    if data.last_active_display is not None:
+        lead.last_active_display = (data.last_active_display or "").strip() or None
+    if data.connection_sent_date is not None:
+        lead.connection_sent_date = (data.connection_sent_date or "").strip() or None
+    if data.replied_y_n is not None:
+        lead.replied_y_n = (data.replied_y_n or "").strip() or None
     if lead.created_at:
         lead.temperature_tag = temperature_for_created_at(lead.created_at)
     db.commit()
@@ -238,6 +276,45 @@ def delete_leads_batch(
     return len(rows)
 
 
+def _norm_csv_header(s: str) -> str:
+    return " ".join(str(s).strip().lower().split())
+
+
+def _csv_header_map(fieldnames: list[str]) -> dict[str, str]:
+    """Normalized header -> original column label from CSV."""
+    m: dict[str, str] = {}
+    for f in fieldnames:
+        if f is None or not str(f).strip():
+            continue
+        m[_norm_csv_header(str(f))] = str(f).strip()
+    return m
+
+
+def _csv_cell(row: dict, hm: dict[str, str], *norm_variants: str) -> str:
+    for nv in norm_variants:
+        k = _norm_csv_header(nv)
+        if k in hm:
+            return sanitize_csv_cell(row.get(hm[k]) or "")
+    return ""
+
+
+def _csv_col_by_prefix(hm: dict[str, str], row: dict, prefix: str) -> str:
+    for nk, orig in hm.items():
+        if nk.startswith(prefix):
+            return sanitize_csv_cell(row.get(orig) or "")
+    return ""
+
+
+def _synthetic_import_email(workspace_id: int) -> str:
+    return f"import-{uuid.uuid4().hex[:22]}@ws{workspace_id}.invalid"
+
+
+def _is_legacy_phone_csv(hm: dict[str, str]) -> bool:
+    has_phone = "phone" in hm or "phone number" in hm
+    has_cc = "country_code" in hm or "country code" in hm
+    return bool(has_phone and has_cc)
+
+
 def import_leads_from_csv(
     db: Session,
     workspace_id: int,
@@ -261,13 +338,28 @@ def import_leads_from_csv(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="CSV has no header row",
         )
-    fields_lower = {f.strip().lower(): f for f in reader.fieldnames if f}
-    required = ("name", "email", "phone", "country_code")
-    for r in required:
-        if r not in fields_lower:
+    hm = _csv_header_map([str(f) for f in reader.fieldnames if f is not None])
+    legacy = _is_legacy_phone_csv(hm)
+    if not legacy and "name" not in hm:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="CSV must include a Name column (or legacy columns: name, email, phone, country_code)",
+        )
+    if legacy:
+        if "name" not in hm or "email" not in hm:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"CSV must include column: {r}",
+                detail="Legacy CSV must include columns: name, email",
+            )
+        if "phone" not in hm and "phone number" not in hm:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Legacy CSV must include column: phone (or phone number)",
+            )
+        if "country_code" not in hm and "country code" not in hm:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Legacy CSV must include column: country_code (or country code)",
             )
 
     email_adapter = TypeAdapter(EmailStr)
@@ -285,80 +377,166 @@ def import_leads_from_csv(
             break
         total_rows += 1
 
-        def col(key: str) -> str:
-            k = fields_lower[key]
-            v = row.get(k)
-            return sanitize_csv_cell(v or "")
+        def cl(key: str) -> str:
+            k = _norm_csv_header(key)
+            if k in hm:
+                return sanitize_csv_cell(row.get(hm[k]) or "")
+            return ""
 
-        name = col("name")
-        email_raw = col("email")
-        phone_raw = col("phone") or ""
-        cc_raw = col("country_code") or None
-
-        if not name or not email_raw:
-            skipped += 1
-            errors.append(f"Row {row_num}: name and email required")
-            continue
-
-        try:
-            email_adapter.validate_python(email_raw)
-        except ValidationError:
-            skipped += 1
-            errors.append(f"Row {row_num}: invalid email")
-            continue
-
-        if not phone_raw.strip():
-            skipped += 1
-            errors.append(f"Row {row_num}: phone required")
-            continue
-        if not is_csv_phone_numeric(phone_raw):
-            skipped += 1
-            errors.append(f"Row {row_num}: phone must be numeric")
-            continue
-        phone = phone_raw.strip()
-
-        if not is_valid_import_country_code(cc_raw):
-            skipped += 1
-            errors.append(f"Row {row_num}: country_code required (+digits or ISO)")
-            continue
-        cc = normalize_country_code(cc_raw)
-        if phone and not is_valid_phone(phone):
-            skipped += 1
-            errors.append(f"Row {row_num}: invalid phone format")
-            continue
+        if legacy:
+            name = cl("name")
+            email_raw = cl("email")
+            phone_raw = cl("phone") or cl("phone number") or ""
+            cc_raw = cl("country_code") or cl("country code") or None
+            if not name or not email_raw:
+                skipped += 1
+                errors.append(f"Row {row_num}: name and email required")
+                continue
+            try:
+                email_adapter.validate_python(email_raw)
+            except ValidationError:
+                skipped += 1
+                errors.append(f"Row {row_num}: invalid email")
+                continue
+            if not phone_raw.strip():
+                skipped += 1
+                errors.append(f"Row {row_num}: phone required")
+                continue
+            if not is_csv_phone_numeric(phone_raw):
+                skipped += 1
+                errors.append(f"Row {row_num}: phone must be numeric")
+                continue
+            phone = phone_raw.strip()
+            if not is_valid_import_country_code(cc_raw):
+                skipped += 1
+                errors.append(f"Row {row_num}: country_code required (+digits or ISO)")
+                continue
+            cc = normalize_country_code(cc_raw)
+            if phone and not is_valid_phone(phone):
+                skipped += 1
+                errors.append(f"Row {row_num}: invalid phone format")
+                continue
+            notes_val = cl("notes") if "notes" in hm else ""
+            lm_csv = cl("last_message") if "last_message" in hm else ""
+            last_m = (notes_val or lm_csv or "").strip() or None
+            csv_st = cl("status") if "status" in hm else ""
+            lead_status = _map_csv_status(csv_st or None)
+            company = None
+            if "company" in hm:
+                c = cl("company")
+                company = c if c else None
+            role_title = profile_link = agency_type = team_size_estimate = None
+            problem_seen = last_active_display = connection_sent_date = replied_y_n = None
+        else:
+            name = _csv_cell(row, hm, "name")
+            if not name:
+                skipped += 1
+                errors.append(f"Row {row_num}: name required")
+                continue
+            email_raw = _csv_cell(row, hm, "email", "e-mail")
+            if not email_raw.strip():
+                email_raw = _synthetic_import_email(workspace_id)
+            try:
+                email_adapter.validate_python(email_raw)
+            except ValidationError:
+                skipped += 1
+                errors.append(f"Row {row_num}: invalid email")
+                continue
+            phone_raw = _csv_cell(row, hm, "phone", "phone number")
+            cc_raw = _csv_cell(row, hm, "country_code", "country code") or None
+            phone = None
+            cc = None
+            if phone_raw.strip():
+                if not is_csv_phone_numeric(phone_raw):
+                    skipped += 1
+                    errors.append(f"Row {row_num}: phone must be numeric when provided")
+                    continue
+                phone = phone_raw.strip()
+                if not is_valid_import_country_code(cc_raw):
+                    skipped += 1
+                    errors.append(
+                        f"Row {row_num}: country_code required when phone is set",
+                    )
+                    continue
+                cc = normalize_country_code(cc_raw)
+                if not is_valid_phone(phone):
+                    skipped += 1
+                    errors.append(f"Row {row_num}: invalid phone format")
+                    continue
+            company = _csv_cell(row, hm, "company") or None
+            role_title = _csv_cell(row, hm, "role") or None
+            profile_link = _csv_cell(row, hm, "profile link", "profile_link") or None
+            agency_type = _csv_col_by_prefix(hm, row, "agency type") or None
+            team_size = _csv_col_by_prefix(hm, row, "team size") or None
+            problem_seen = _csv_cell(row, hm, "problem seen") or None
+            last_active_display = _csv_cell(row, hm, "last active") or None
+            connection_sent_date = _csv_col_by_prefix(hm, row, "connection sent") or None
+            replied_raw = ""
+            for nk, orig in hm.items():
+                if "replied" in nk:
+                    replied_raw = sanitize_csv_cell(row.get(orig) or "")
+                    break
+            replied_y_n = replied_raw or None
+            team_size_estimate = team_size or None
+            csv_status = _csv_cell(row, hm, "status")
+            last_m = (
+                _csv_cell(row, hm, "notes", "last_message").strip() or None
+            )
+            lead_status = _map_csv_status(csv_status or None)
 
         if db.query(Lead).filter(Lead.workspace_id == workspace_id, Lead.email == email_raw).first():
             skipped += 1
             errors.append(f"Row {row_num}: duplicate email in workspace")
             continue
 
-        notes_val = col("notes") if "notes" in fields_lower else ""
-        lm_csv = col("last_message") if "last_message" in fields_lower else ""
-        last_m = (notes_val or lm_csv or "").strip() or None
-
-        csv_status = col("status") if "status" in fields_lower else ""
-        lead_status = _map_csv_status(csv_status or None)
-
-        company = None
-        if "company" in fields_lower:
-            c = col("company")
-            company = c if c else None
-
-        db.add(
-            Lead(
-                name=name,
-                email=email_raw,
-                status=lead_status,
-                tag=None,
-                phone_number=phone,
-                country_code=cc,
-                company=company,
-                last_message=last_m,
-                workspace_id=workspace_id,
-                temperature_tag="hot",
-                owner_user_id=owner_user_id,
+        if legacy:
+            db.add(
+                Lead(
+                    name=name,
+                    email=email_raw,
+                    status=lead_status,
+                    tag=None,
+                    phone_number=phone,
+                    country_code=cc,
+                    company=company,
+                    last_message=last_m,
+                    role_title=None,
+                    profile_link=None,
+                    agency_type=None,
+                    team_size_estimate=None,
+                    problem_seen=None,
+                    last_active_display=None,
+                    connection_sent_date=None,
+                    replied_y_n=None,
+                    workspace_id=workspace_id,
+                    temperature_tag="hot",
+                    owner_user_id=owner_user_id,
+                )
             )
-        )
+        else:
+            db.add(
+                Lead(
+                    name=name,
+                    email=email_raw,
+                    status=lead_status,
+                    tag=None,
+                    phone_number=phone,
+                    country_code=cc,
+                    company=company or None,
+                    last_message=last_m,
+                    role_title=role_title,
+                    profile_link=profile_link,
+                    agency_type=agency_type,
+                    team_size_estimate=team_size_estimate,
+                    problem_seen=problem_seen,
+                    last_active_display=last_active_display,
+                    connection_sent_date=connection_sent_date,
+                    replied_y_n=replied_y_n,
+                    workspace_id=workspace_id,
+                    temperature_tag="hot",
+                    owner_user_id=owner_user_id,
+                )
+            )
         imported_emails.append(email_raw)
         inserted += 1
 

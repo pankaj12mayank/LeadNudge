@@ -43,7 +43,7 @@ export default function AdminLeads() {
           const ws = wsById[r.workspace_id];
           return (
             <span className="max-w-[10rem] truncate text-sm">
-              {ws ? workspaceLabel(ws) : `#${r.workspace_id}`}
+              {ws ? workspaceLabel(ws.name) : `#${r.workspace_id}`}
             </span>
           );
         },
@@ -58,6 +58,27 @@ export default function AdminLeads() {
         ),
       },
       { key: "name", label: "Name", render: (r) => <span className="text-sm">{r.name}</span> },
+      {
+        key: "company",
+        label: "Company",
+        render: (r) => (
+          <span className="max-w-[8rem] truncate text-xs">{r.company || "—"}</span>
+        ),
+      },
+      {
+        key: "role_title",
+        label: "Role",
+        render: (r) => (
+          <span className="max-w-[6rem] truncate text-xs">{r.role_title || "—"}</span>
+        ),
+      },
+      {
+        key: "agency_type",
+        label: "Agency",
+        render: (r) => (
+          <span className="max-w-[6rem] truncate text-xs">{r.agency_type || "—"}</span>
+        ),
+      },
       { key: "email", label: "Email", render: (r) => <span className="text-sm">{r.email}</span> },
       {
         key: "status",
@@ -163,7 +184,7 @@ export default function AdminLeads() {
               <option value="">All workspaces</option>
               {(workspaces || []).map((w) => (
                 <option key={w.id} value={String(w.id)}>
-                  {workspaceLabel(w)}
+                  {workspaceLabel(w.name)}
                 </option>
               ))}
             </select>

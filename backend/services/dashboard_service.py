@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 from models.followup import Followup
 from models.lead import Lead
 from models.settings import WorkspaceSettings
+from models.user import User
 from schemas.dashboard import (
     DashboardFollowupRow,
     DashboardLeadRow,
@@ -62,10 +63,19 @@ def get_sales_dashboard(
         .filter(WorkspaceSettings.workspace_id == workspace_id)
         .first()
     )
-    manual_replies = int(settings_row.dashboard_manual_replies or 0) if settings_row else 0
-    manual_conversions = (
-        int(settings_row.dashboard_manual_conversions or 0) if settings_row else 0
-    )
+    if owner_user_id is not None:
+        u = db.get(User, owner_user_id)
+        manual_replies = int(u.dashboard_manual_replies or 0) if u else 0
+        manual_conversions = int(u.dashboard_manual_conversions or 0) if u else 0
+    else:
+        manual_replies = (
+            int(settings_row.dashboard_manual_replies or 0) if settings_row else 0
+        )
+        manual_conversions = (
+            int(settings_row.dashboard_manual_conversions or 0)
+            if settings_row
+            else 0
+        )
 
     recent_fu_q = (
         db.query(Followup)

@@ -20,10 +20,13 @@ from services import lead_service
 router = APIRouter(prefix="/leads", tags=["leads"])
 
 CSV_SAMPLE = (
-    "name,email,phone,country_code,company,status,notes\n"
-    "John Doe,john@example.com,9876543210,+91,ABC Pvt Ltd,New,Interested in demo\n"
-    "Sarah Smith,sarah@gmail.com,5551234567,+1,XYZ Inc,Contacted,Follow-up next week\n"
-    "Ali Khan,ali@yahoo.com,501234567,+971,Tech LLC,New,Requested pricing\n"
+    '"Name","Company","Role","Profile Link","Agency Type (SEO / Ads / Creative)",'
+    '"Team Size (estimate)","Problem Seen","Last Active","Connection Sent (Date)",'
+    '"Replied (Y/N)","Status"\n'
+    '"Jane Agency Lead","Pixel Growth Co","Founder","https://linkedin.com/in/example",'
+    '"SEO","10-20","Asked for technical audit","2025-01-12","2025-01-08","Y","contacted"\n'
+    '"Ravi Mehta","Monsoon Ads","Head of Growth","https://linkedin.com/in/ravimehta",'
+    '"Ads","50+","Budget freeze concern","2025-01-10","2025-01-02","N","new"\n'
 )
 
 

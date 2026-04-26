@@ -220,6 +220,38 @@ def _sqlite_migrate_branding_extras() -> None:
                 pass
 
 
+def _backfill_outbound_emails_owner_user_id() -> None:
+    """Attach portal user to legacy outbound rows (per-user Sent mail isolation)."""
+    try:
+        insp = inspect(engine)
+        if "outbound_emails" not in insp.get_table_names():
+            return
+        cols = {c["name"] for c in insp.get_columns("outbound_emails")}
+        if "owner_user_id" not in cols:
+            return
+    except Exception:
+        return
+    stmts = [
+        (
+            "UPDATE outbound_emails SET owner_user_id = ("
+            "SELECT l.owner_user_id FROM leads l WHERE l.id = outbound_emails.lead_id"
+            ") WHERE owner_user_id IS NULL AND lead_id IS NOT NULL"
+        ),
+        (
+            "UPDATE outbound_emails SET owner_user_id = ("
+            "SELECT f.scheduled_by_user_id FROM followups f "
+            "WHERE f.id = outbound_emails.followup_id"
+            ") WHERE owner_user_id IS NULL AND followup_id IS NOT NULL"
+        ),
+    ]
+    for stmt in stmts:
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(stmt))
+        except Exception:
+            pass
+
+
 def _ensure_followup_pending_lead_schedule_unique() -> None:
     """
     Prevent duplicate pending follow-ups for the same lead and scheduled instant (race-safe).
@@ -412,6 +444,58 @@ def init_db() -> None:
         ),
     )
     _ensure_column_if_missing(
+        "leads",
+        "role_title",
+        sqlite_ddl="ALTER TABLE leads ADD COLUMN role_title VARCHAR(255)",
+        postgres_ddl="ALTER TABLE leads ADD COLUMN IF NOT EXISTS role_title VARCHAR(255)",
+    )
+    _ensure_column_if_missing(
+        "leads",
+        "profile_link",
+        sqlite_ddl="ALTER TABLE leads ADD COLUMN profile_link VARCHAR(512)",
+        postgres_ddl="ALTER TABLE leads ADD COLUMN IF NOT EXISTS profile_link VARCHAR(512)",
+    )
+    _ensure_column_if_missing(
+        "leads",
+        "agency_type",
+        sqlite_ddl="ALTER TABLE leads ADD COLUMN agency_type VARCHAR(128)",
+        postgres_ddl="ALTER TABLE leads ADD COLUMN IF NOT EXISTS agency_type VARCHAR(128)",
+    )
+    _ensure_column_if_missing(
+        "leads",
+        "team_size_estimate",
+        sqlite_ddl="ALTER TABLE leads ADD COLUMN team_size_estimate VARCHAR(64)",
+        postgres_ddl="ALTER TABLE leads ADD COLUMN IF NOT EXISTS team_size_estimate VARCHAR(64)",
+    )
+    _ensure_column_if_missing(
+        "leads",
+        "problem_seen",
+        sqlite_ddl="ALTER TABLE leads ADD COLUMN problem_seen TEXT",
+        postgres_ddl="ALTER TABLE leads ADD COLUMN IF NOT EXISTS problem_seen TEXT",
+    )
+    _ensure_column_if_missing(
+        "leads",
+        "last_active_display",
+        sqlite_ddl="ALTER TABLE leads ADD COLUMN last_active_display VARCHAR(128)",
+        postgres_ddl=(
+            "ALTER TABLE leads ADD COLUMN IF NOT EXISTS last_active_display VARCHAR(128)"
+        ),
+    )
+    _ensure_column_if_missing(
+        "leads",
+        "connection_sent_date",
+        sqlite_ddl="ALTER TABLE leads ADD COLUMN connection_sent_date VARCHAR(128)",
+        postgres_ddl=(
+            "ALTER TABLE leads ADD COLUMN IF NOT EXISTS connection_sent_date VARCHAR(128)"
+        ),
+    )
+    _ensure_column_if_missing(
+        "leads",
+        "replied_y_n",
+        sqlite_ddl="ALTER TABLE leads ADD COLUMN replied_y_n VARCHAR(8)",
+        postgres_ddl="ALTER TABLE leads ADD COLUMN IF NOT EXISTS replied_y_n VARCHAR(8)",
+    )
+    _ensure_column_if_missing(
         "followups",
         "followup_type",
         sqlite_ddl="ALTER TABLE followups ADD COLUMN followup_type VARCHAR(16) DEFAULT 'normal' NOT NULL",
@@ -493,6 +577,28 @@ def init_db() -> None:
         ),
     )
     _ensure_column_if_missing(
+        "users",
+        "dashboard_manual_replies",
+        sqlite_ddl=(
+            "ALTER TABLE users ADD COLUMN dashboard_manual_replies INTEGER DEFAULT 0 NOT NULL"
+        ),
+        postgres_ddl=(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS dashboard_manual_replies "
+            "INTEGER NOT NULL DEFAULT 0"
+        ),
+    )
+    _ensure_column_if_missing(
+        "users",
+        "dashboard_manual_conversions",
+        sqlite_ddl=(
+            "ALTER TABLE users ADD COLUMN dashboard_manual_conversions INTEGER DEFAULT 0 NOT NULL"
+        ),
+        postgres_ddl=(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS dashboard_manual_conversions "
+            "INTEGER NOT NULL DEFAULT 0"
+        ),
+    )
+    _ensure_column_if_missing(
         "followups",
         "scheduled_by_user_id",
         sqlite_ddl="ALTER TABLE followups ADD COLUMN scheduled_by_user_id INTEGER",
@@ -506,6 +612,14 @@ def init_db() -> None:
         sqlite_ddl="ALTER TABLE messages ADD COLUMN created_by_user_id INTEGER",
         postgres_ddl=(
             "ALTER TABLE messages ADD COLUMN IF NOT EXISTS created_by_user_id INTEGER"
+        ),
+    )
+    _ensure_column_if_missing(
+        "outbound_emails",
+        "owner_user_id",
+        sqlite_ddl="ALTER TABLE outbound_emails ADD COLUMN owner_user_id INTEGER",
+        postgres_ddl=(
+            "ALTER TABLE outbound_emails ADD COLUMN IF NOT EXISTS owner_user_id INTEGER"
         ),
     )
     if settings.database_url.startswith("sqlite"):
@@ -559,6 +673,8 @@ def init_db() -> None:
             )
     except Exception:
         pass
+
+    _backfill_outbound_emails_owner_user_id()
 
     from services import admin_service
     from services.template_mail_service import ensure_default_templates

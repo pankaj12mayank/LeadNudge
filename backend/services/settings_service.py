@@ -57,6 +57,22 @@ def _workspace_outbound_count(db: Session, workspace_id: int) -> int:
     return int(db.execute(stmt).scalar_one())
 
 
+def _user_outbound_count(db: Session, user_id: int) -> int:
+    """SMTP follow-up sends attributed to this portal user only."""
+    u = db.get(User, user_id)
+    if not u or u.workspace_id is None:
+        return 0
+    stmt = (
+        select(func.count())
+        .select_from(OutboundEmail)
+        .where(
+            OutboundEmail.workspace_id == u.workspace_id,
+            OutboundEmail.owner_user_id == user_id,
+        )
+    )
+    return int(db.execute(stmt).scalar_one())
+
+
 def _smtp_configured(row: WorkspaceSettings) -> bool:
     return bool(
         (row.smtp_host or "").strip()
@@ -92,7 +108,11 @@ def get_settings_out(
     elif row.smtp_password:
         smtp_pw = "***"
 
-    outbound_n = _workspace_outbound_count(db, workspace_id)
+    outbound_n = (
+        _user_outbound_count(db, for_user_id)
+        if for_user_id is not None
+        else _workspace_outbound_count(db, workspace_id)
+    )
 
     from services import usage_alerts_service
     from services.plan_access_service import (
@@ -125,6 +145,14 @@ def get_settings_out(
     ws_row = db.get(Workspace, workspace_id)
     plan_exp = portal_shows_plan_expired_notice(db, workspace_id, for_user_id)
 
+    u_portal = db.get(User, for_user_id) if for_user_id is not None else None
+    if u_portal is not None:
+        dm_replies = int(u_portal.dashboard_manual_replies or 0)
+        dm_conv = int(u_portal.dashboard_manual_conversions or 0)
+    else:
+        dm_replies = int(row.dashboard_manual_replies or 0)
+        dm_conv = int(row.dashboard_manual_conversions or 0)
+
     return SettingsOut(
         workspace_id=row.workspace_id,
         ai_mode=row.ai_mode,
@@ -149,13 +177,17 @@ def get_settings_out(
         ai_features_blocked=features_blocked,
         plan_expires_at=ws_row.plan_expires_at if ws_row else None,
         smtp_fully_configured=_smtp_configured(row),
-        dashboard_manual_replies=int(row.dashboard_manual_replies or 0),
-        dashboard_manual_conversions=int(row.dashboard_manual_conversions or 0),
+        dashboard_manual_replies=dm_replies,
+        dashboard_manual_conversions=dm_conv,
     )
 
 
 def update_user_settings(
-    db: Session, workspace_id: int, data: SettingsUpdate
+    db: Session,
+    workspace_id: int,
+    data: SettingsUpdate,
+    *,
+    for_user_id: int | None = None,
 ) -> WorkspaceSettings:
     row = (
         db.query(WorkspaceSettings)
@@ -221,10 +253,23 @@ def update_user_settings(
         s = (data.followup_sender_display_name or "").strip()
         row.followup_sender_display_name = s or None
 
-    if data.dashboard_manual_replies is not None:
-        row.dashboard_manual_replies = int(data.dashboard_manual_replies)
-    if data.dashboard_manual_conversions is not None:
-        row.dashboard_manual_conversions = int(data.dashboard_manual_conversions)
+    if data.dashboard_manual_replies is not None or data.dashboard_manual_conversions is not None:
+        if for_user_id is not None:
+            u = db.get(User, for_user_id)
+            if not u or int(u.workspace_id) != int(workspace_id):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="User not found",
+                )
+            if data.dashboard_manual_replies is not None:
+                u.dashboard_manual_replies = int(data.dashboard_manual_replies)
+            if data.dashboard_manual_conversions is not None:
+                u.dashboard_manual_conversions = int(data.dashboard_manual_conversions)
+        else:
+            if data.dashboard_manual_replies is not None:
+                row.dashboard_manual_replies = int(data.dashboard_manual_replies)
+            if data.dashboard_manual_conversions is not None:
+                row.dashboard_manual_conversions = int(data.dashboard_manual_conversions)
 
     if ws_plan and (ws_plan.plan_type or "free").lower() != "pro":
         row.ai_mode = "local"

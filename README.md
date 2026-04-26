@@ -156,7 +156,7 @@ See **[`SIMPLE_START.md`](./SIMPLE_START.md)** (install Python, Node, Ollama →
 ## Project layout
 
 ```text
-ai-sales-agent/
+LeadNudge/
 ├── backend/                    # FastAPI, SQLAlchemy, agents; requirements.txt
 ├── frontend/                 # React + Vite + Tailwind
 ├── start.bat                   # Windows: backend + frontend + browser + Ollama check

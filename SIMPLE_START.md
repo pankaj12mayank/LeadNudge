@@ -22,9 +22,9 @@ Quick paths for **local** development vs **hosting on a server**. Full detail: *
 1. **Python 3.11+** — [python.org](https://www.python.org/downloads/) — tick *Add to PATH*.
 2. **Node.js 18+ LTS** — [nodejs.org](https://nodejs.org/).
 3. **Ollama** — [ollama.com](https://ollama.com); then e.g. `ollama pull llama3.2` (match `OLLAMA_MODEL` in `backend/.env`, often `llama3.2:latest`).
-4. Put the **`ai-sales-agent`** folder somewhere easy (Desktop, etc.).
-5. **Backend** (Command Prompt or PowerShell): follow **[`CLIENT_SETUP.md`](./CLIENT_SETUP.md) → section 3** (`venv`, `pip install -r requirements.txt`, copy `.env`, set `BOOTSTRAP_ADMIN_*` and `SECRET_KEY`).
-6. **Frontend:** `cd frontend` → `npm install` → copy `frontend/.env.example` to `frontend/.env` if needed.
+4. Put the **LeadNudge** project folder somewhere easy (Desktop, etc.).
+5. **First run:** double-click **`start.bat`** — it creates **`backend/.env`** from **`backend/.env.example`** if missing, installs deps, then starts the stack. For manual setup instead, see **[`CLIENT_SETUP.md`](./CLIENT_SETUP.md) → section 3**.
+6. **Frontend (optional manual):** `cd frontend` → `npm install` or `npm ci` → copy `frontend/.env.example` to `frontend/.env` if needed.
 
 ### Every time you run locally
 
@@ -42,7 +42,7 @@ Quick paths for **local** development vs **hosting on a server**. Full detail: *
 Same prerequisites (Python 3.11+, Node 18+, Ollama). Use a terminal:
 
 ```bash
-cd /path/to/ai-sales-agent/backend
+cd /path/to/LeadNudge/backend
 python3 -m venv ../.venv
 source ../.venv/bin/activate   # Windows venv: ..\.venv\Scripts\activate
 pip install -U pip

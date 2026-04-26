@@ -19,6 +19,12 @@ class OutboundEmail(Base):
     workspace_id: Mapped[int] = mapped_column(
         ForeignKey("workspaces.id"), index=True
     )
+    # Portal user who owns this row (aligns with lead.owner_user_id for their sends).
+    owner_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     followup_id: Mapped[int | None] = mapped_column(
         ForeignKey("followups.id", ondelete="SET NULL"), nullable=True, index=True
     )

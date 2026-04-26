@@ -24,6 +24,14 @@ class LeadCreate(BaseModel):
         max_length=20000,
         description="Last note or inbound message; used as AI context when no thread exists",
     )
+    role_title: str | None = Field(default=None, max_length=255)
+    profile_link: str | None = Field(default=None, max_length=512)
+    agency_type: str | None = Field(default=None, max_length=128)
+    team_size_estimate: str | None = Field(default=None, max_length=64)
+    problem_seen: str | None = Field(default=None, max_length=20000)
+    last_active_display: str | None = Field(default=None, max_length=128)
+    connection_sent_date: str | None = Field(default=None, max_length=128)
+    replied_y_n: str | None = Field(default=None, max_length=8)
 
     @field_validator("phone_number")
     @classmethod
@@ -54,6 +62,14 @@ class LeadUpdate(BaseModel):
     country_code: str | None = Field(default=None, max_length=8)
     company: str | None = Field(default=None, max_length=255)
     last_message: str | None = Field(default=None, max_length=20000)
+    role_title: str | None = Field(default=None, max_length=255)
+    profile_link: str | None = Field(default=None, max_length=512)
+    agency_type: str | None = Field(default=None, max_length=128)
+    team_size_estimate: str | None = Field(default=None, max_length=64)
+    problem_seen: str | None = Field(default=None, max_length=20000)
+    last_active_display: str | None = Field(default=None, max_length=128)
+    connection_sent_date: str | None = Field(default=None, max_length=128)
+    replied_y_n: str | None = Field(default=None, max_length=8)
 
     @field_validator("phone_number")
     @classmethod
@@ -90,6 +106,14 @@ class LeadOut(BaseModel):
     company: str | None = None
     temperature_tag: str | None = None
     last_message: str | None = None
+    role_title: str | None = None
+    profile_link: str | None = None
+    agency_type: str | None = None
+    team_size_estimate: str | None = None
+    problem_seen: str | None = None
+    last_active_display: str | None = None
+    connection_sent_date: str | None = None
+    replied_y_n: str | None = None
     workspace_id: int
     owner_user_id: int | None = None
     created_at: datetime | None = None

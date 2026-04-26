@@ -1,14 +1,14 @@
 @echo off
 cd /d "%~dp0"
 
-REM LeadNudge — one double-click: venv + pip + npm + verify, then backend + frontend in ONE window.
+REM LeadNudge - one double-click: venv + pip + npm + verify, then backend + frontend in ONE window.
 REM Ollama runs in a separate window when not already listening on 11434.
 REM Optional: set SKIP_OLLAMA_AUTO=1 to skip starting Ollama.
 
-title LeadNudge — starting
+title LeadNudge - starting
 
 echo.
-echo  LeadNudge — install, verify, run
+echo  LeadNudge - install, verify, run
 echo  Root: %~dp0
 echo.
 
@@ -37,6 +37,16 @@ if not exist "%~dp0.venv\Scripts\python.exe" (
 
 set "PYEXE=%~dp0.venv\Scripts\python.exe"
 
+if not exist "%~dp0backend\.env" (
+  if exist "%~dp0backend\.env.example" (
+    echo [setup] Creating backend\.env from .env.example ...
+    copy /y "%~dp0backend\.env.example" "%~dp0backend\.env" >nul
+    echo   Edit backend\.env for production ^(SECRET_KEY, BOOTSTRAP_ADMIN_PASSWORD^).
+  ) else (
+    echo WARNING: backend\.env.example missing - create backend\.env manually.
+  )
+)
+
 echo [2/4] Backend dependencies ^(pip^)...
 "%PYEXE%" -m pip install -q --upgrade pip
 if errorlevel 1 (
@@ -53,9 +63,13 @@ if errorlevel 1 (
 
 echo [3/4] Frontend dependencies ^(npm^)...
 pushd "%~dp0frontend"
-call npm install --no-fund --no-audit
+if exist "package-lock.json" (
+  call npm ci --no-fund --no-audit
+) else (
+  call npm install --no-fund --no-audit
+)
 if errorlevel 1 (
-  echo ERROR: npm install failed
+  echo ERROR: npm ci / install failed
   popd
   pause
   exit /b 1
@@ -77,7 +91,7 @@ if not exist "%~dp0frontend\node_modules\vite\package.json" (
 echo   Frontend: OK ^(vite present^)
 
 if not defined SKIP_OLLAMA_AUTO (
-  curl -s -m 2 http://127.0.0.1:11434/api/tags >nul 2>&1
+  powershell -NoProfile -Command "try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 -Uri 'http://127.0.0.1:11434/api/tags' | Out-Null; exit 0 } catch { exit 1 }" >nul 2>&1
   if errorlevel 1 (
     where ollama >nul 2>&1 && (
       echo.
@@ -89,9 +103,9 @@ if not defined SKIP_OLLAMA_AUTO (
 )
 
 echo.
-curl -s -m 3 http://127.0.0.1:11434/api/version >nul 2>&1
+powershell -NoProfile -Command "try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 -Uri 'http://127.0.0.1:11434/api/version' | Out-Null; exit 0 } catch { exit 1 }" >nul 2>&1
 if errorlevel 1 (
-  echo  Ollama: not on port 11434 ^(optional — needed for local AI features^)
+  echo  Ollama: not on port 11434 ^(optional - needed for local AI features^)
 ) else (
   echo  Ollama: OK at http://127.0.0.1:11434
 )
@@ -100,6 +114,9 @@ echo.
 echo  Backend + frontend will run below with [backend] / [frontend] prefixes.
 echo  Press Ctrl+C in this window to stop both.
 echo.
+
+REM Open browser after a short delay ^(Vite usually ready by then^).
+start "LeadNudge-browser" /MIN cmd /c "ping -n 12 127.0.0.1 >nul && start http://localhost:5173/"
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0dev.ps1" -SkipInstall
 set "PS_EXIT=%ERRORLEVEL%"

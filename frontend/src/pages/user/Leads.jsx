@@ -24,7 +24,21 @@ const emptyForm = {
   company: "",
   phoneE164: "",
   last_message: "",
+  role_title: "",
+  profile_link: "",
+  agency_type: "",
+  team_size_estimate: "",
+  problem_seen: "",
+  last_active_display: "",
+  connection_sent_date: "",
+  replied_y_n: "",
 };
+
+function trunc(s, n = 48) {
+  const t = (s || "").trim();
+  if (!t) return "—";
+  return t.length > n ? `${t.slice(0, n)}…` : t;
+}
 
 function phonePayload(phoneE164) {
   const trimmed = phoneE164?.trim() || "";
@@ -132,6 +146,14 @@ export default function Leads() {
         phone_number: ph.phone_number,
         country_code: ph.country_code,
         last_message: form.last_message.trim() || null,
+        role_title: form.role_title.trim() || null,
+        profile_link: form.profile_link.trim() || null,
+        agency_type: form.agency_type.trim() || null,
+        team_size_estimate: form.team_size_estimate.trim() || null,
+        problem_seen: form.problem_seen.trim() || null,
+        last_active_display: form.last_active_display.trim() || null,
+        connection_sent_date: form.connection_sent_date.trim() || null,
+        replied_y_n: form.replied_y_n.trim() || null,
       });
       setForm(emptyForm);
       setAddOpen(false);
@@ -162,6 +184,14 @@ export default function Leads() {
         phone_number: ph.phone_number,
         country_code: ph.country_code,
         last_message: editing.last_message?.trim() || null,
+        role_title: (editing.role_title || "").trim() || null,
+        profile_link: (editing.profile_link || "").trim() || null,
+        agency_type: (editing.agency_type || "").trim() || null,
+        team_size_estimate: (editing.team_size_estimate || "").trim() || null,
+        problem_seen: (editing.problem_seen || "").trim() || null,
+        last_active_display: (editing.last_active_display || "").trim() || null,
+        connection_sent_date: (editing.connection_sent_date || "").trim() || null,
+        replied_y_n: (editing.replied_y_n || "").trim() || null,
       });
       setEditing(null);
       toast.success("Lead updated");
@@ -258,116 +288,196 @@ export default function Leads() {
 
   const columns = useMemo(
     () => [
-    {
-      key: "_sel",
-      label: "",
-      render: (r) => (
-        <input
-          type="checkbox"
-          checked={selectedIds.has(r.id)}
-          onChange={(e) => {
-            const next = new Set(selectedIds);
-            if (e.target.checked) next.add(r.id);
-            else next.delete(r.id);
-            setSelectedIds(next);
-          }}
-          aria-label={`Select lead ${r.id}`}
-        />
-      ),
-    },
-    { key: "id", label: "ID" },
-    { key: "name", label: "Name" },
-    { key: "email", label: "Email" },
-    {
-      key: "phone_number",
-      label: "Phone",
-      render: (r) => {
-        const flag = countryFlagEmoji(r.country_code);
-        return (
-          <span className="inline-flex items-center gap-2 text-neutral-600 dark:text-neutral-400">
-            {flag ? (
-              <span className="text-lg leading-none" title={r.country_code || ""}>
-                {flag}
-              </span>
-            ) : null}
-            <span>
-              {r.country_code ? `${r.country_code} ` : ""}
-              {r.phone_number || "—"}
-            </span>
+      {
+        key: "_sel",
+        label: "",
+        render: (r) => (
+          <input
+            type="checkbox"
+            checked={selectedIds.has(r.id)}
+            onChange={(e) => {
+              const next = new Set(selectedIds);
+              if (e.target.checked) next.add(r.id);
+              else next.delete(r.id);
+              setSelectedIds(next);
+            }}
+            aria-label={`Select lead ${r.id}`}
+          />
+        ),
+      },
+      { key: "id", label: "ID" },
+      { key: "name", label: "Name" },
+      {
+        key: "company",
+        label: "Company",
+        render: (r) => (
+          <span className="max-w-[8rem] truncate text-sm text-neutral-600 dark:text-neutral-400">
+            {r.company || "—"}
           </span>
-        );
+        ),
       },
-    },
-    {
-      key: "status",
-      label: "Status",
-      render: (r) => <Badge variant="muted">{r.status}</Badge>,
-    },
-    {
-      key: "temperature_tag",
-      label: "Heat",
-      render: (r) => {
-        const t = (r.temperature_tag || "").toLowerCase();
-        if (!t) return <span className="text-neutral-400">—</span>;
-        const v =
-          t === "hot" ? "hot" : t === "warm" ? "warm" : t === "cold" ? "cold" : "muted";
-        return (
-          <Badge variant={v}>
-            {t === "hot" ? "HOT" : t === "warm" ? "WARM" : t === "cold" ? "COLD" : t}
-          </Badge>
-        );
+      {
+        key: "role_title",
+        label: "Role",
+        render: (r) => (
+          <span className="max-w-[7rem] truncate text-sm">{r.role_title || "—"}</span>
+        ),
       },
-    },
-    {
-      key: "company",
-      label: "Company",
-      render: (r) => (
-        <span className="max-w-xs truncate text-sm text-neutral-600 dark:text-neutral-400">
-          {r.company || "—"}
-        </span>
-      ),
-    },
-    {
-      key: "last_message",
-      label: "Last message",
-      render: (r) => (
-        <span className="line-clamp-2 max-w-xs text-sm text-neutral-600 dark:text-neutral-400">
-          {r.last_message || "—"}
-        </span>
-      ),
-    },
-    {
-      key: "actions",
-      label: "",
-      render: (r) => (
-        <div className="flex gap-2">
-          <button
-            type="button"
-            className="text-sm font-medium text-neutral-900 underline decoration-neutral-400 underline-offset-2 dark:text-neutral-100"
-            onClick={() =>
-              setEditing({
-                id: r.id,
-                name: r.name,
-                email: r.email,
-                status: r.status,
-                company: r.company || "",
-                phoneE164: r.phone_number || "",
-                last_message: r.last_message || "",
-              })
-            }
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            className="text-sm font-medium text-neutral-600 underline decoration-neutral-400 underline-offset-2 dark:text-neutral-400"
-            onClick={() => onDelete(r.id)}
-          >
-            Delete
-          </button>
-        </div>
-      ),
-    },
+      {
+        key: "profile_link",
+        label: "Profile Link",
+        render: (r) => {
+          const u = (r.profile_link || "").trim();
+          if (!u) return "—";
+          if (/^https?:\/\//i.test(u)) {
+            return (
+              <a
+                href={u}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="max-w-[9rem] truncate text-sm text-blue-600 underline dark:text-blue-400"
+              >
+                {trunc(u, 28)}
+              </a>
+            );
+          }
+          return <span className="max-w-[9rem] truncate text-sm">{trunc(u, 28)}</span>;
+        },
+      },
+      {
+        key: "agency_type",
+        label: "Agency Type",
+        render: (r) => (
+          <span className="max-w-[7rem] truncate text-sm">{r.agency_type || "—"}</span>
+        ),
+      },
+      {
+        key: "team_size_estimate",
+        label: "Team Size",
+        render: (r) => (
+          <span className="max-w-[6rem] truncate text-sm">{r.team_size_estimate || "—"}</span>
+        ),
+      },
+      {
+        key: "problem_seen",
+        label: "Problem Seen",
+        render: (r) => (
+          <span className="line-clamp-2 max-w-[10rem] text-xs text-neutral-600 dark:text-neutral-400">
+            {r.problem_seen || "—"}
+          </span>
+        ),
+      },
+      {
+        key: "last_active_display",
+        label: "Last Active",
+        render: (r) => (
+          <span className="max-w-[7rem] truncate text-xs">{r.last_active_display || "—"}</span>
+        ),
+      },
+      {
+        key: "connection_sent_date",
+        label: "Connection Sent",
+        render: (r) => (
+          <span className="max-w-[7rem] truncate text-xs">{r.connection_sent_date || "—"}</span>
+        ),
+      },
+      {
+        key: "replied_y_n",
+        label: "Replied",
+        render: (r) => (
+          <span className="text-sm font-medium tabular-nums">{r.replied_y_n || "—"}</span>
+        ),
+      },
+      {
+        key: "status",
+        label: "Status",
+        render: (r) => <Badge variant="muted">{r.status}</Badge>,
+      },
+      { key: "email", label: "Email" },
+      {
+        key: "phone_number",
+        label: "Phone",
+        render: (r) => {
+          const flag = countryFlagEmoji(r.country_code);
+          return (
+            <span className="inline-flex max-w-[9rem] items-center gap-1 text-xs text-neutral-600 dark:text-neutral-400">
+              {flag ? (
+                <span className="text-base leading-none" title={r.country_code || ""}>
+                  {flag}
+                </span>
+              ) : null}
+              <span className="truncate">
+                {r.country_code ? `${r.country_code} ` : ""}
+                {r.phone_number || "—"}
+              </span>
+            </span>
+          );
+        },
+      },
+      {
+        key: "temperature_tag",
+        label: "Heat",
+        render: (r) => {
+          const t = (r.temperature_tag || "").toLowerCase();
+          if (!t) return <span className="text-neutral-400">—</span>;
+          const v =
+            t === "hot" ? "hot" : t === "warm" ? "warm" : t === "cold" ? "cold" : "muted";
+          return (
+            <Badge variant={v}>
+              {t === "hot" ? "HOT" : t === "warm" ? "WARM" : t === "cold" ? "COLD" : t}
+            </Badge>
+          );
+        },
+      },
+      {
+        key: "last_message",
+        label: "Last message",
+        render: (r) => (
+          <span className="line-clamp-2 max-w-[8rem] text-xs text-neutral-600 dark:text-neutral-400">
+            {r.last_message || "—"}
+          </span>
+        ),
+      },
+      {
+        key: "actions",
+        label: "",
+        render: (r) => (
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="text-sm font-medium text-neutral-900 underline decoration-neutral-400 underline-offset-2 dark:text-neutral-100"
+              onClick={() =>
+                setEditing({
+                  id: r.id,
+                  name: r.name,
+                  email: r.email,
+                  status: r.status,
+                  company: r.company || "",
+                  phoneE164: r.phone_number || "",
+                  last_message: r.last_message || "",
+                  role_title: r.role_title || "",
+                  profile_link: r.profile_link || "",
+                  agency_type: r.agency_type || "",
+                  team_size_estimate: r.team_size_estimate || "",
+                  problem_seen: r.problem_seen || "",
+                  last_active_display: r.last_active_display || "",
+                  connection_sent_date: r.connection_sent_date || "",
+                  replied_y_n: r.replied_y_n || "",
+                })
+              }
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              className="text-sm font-medium text-neutral-600 underline decoration-neutral-400 underline-offset-2 dark:text-neutral-400"
+              onClick={() => onDelete(r.id)}
+            >
+              Delete
+            </button>
+          </div>
+        ),
+      },
     ],
     [selectedIds],
   );
@@ -384,8 +494,9 @@ export default function Leads() {
               Contact list &amp; stages
             </h1>
             <p className="mt-2 w-full text-sm text-neutral-600 dark:text-neutral-400">
-              Import CSV or add one contact at a time. Search, edit status, and keep phone numbers
-              current.
+              Table columns follow your pipeline headers (Name, Company, Role, profile link, agency
+              type, etc.). Import the sample CSV or add leads manually — legacy phone+email CSV still
+              works.
             </p>
           </div>
           <button
@@ -421,10 +532,11 @@ export default function Leads() {
             Download Sample CSV
           </button>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Required: <strong>name</strong>, <strong>email</strong>, <strong>phone</strong> (numeric),{" "}
-            <strong>country_code</strong> (e.g. +91, +1). Optional: <strong>company</strong>,{" "}
-            <strong>status</strong>, <strong>notes</strong> (saved as lead context for AI). Invalid
-            rows are skipped; see import summary below.
+            <strong>Default format:</strong> Name, Company, Role, Profile Link, Agency Type (SEO /
+            Ads / Creative), Team Size (estimate), Problem Seen, Last Active, Connection Sent
+            (Date), Replied (Y/N), Status — <strong>email optional</strong> (auto placeholder if
+            blank). <strong>Legacy:</strong> name, email, phone, country_code (+ optional company,
+            status, notes).
           </p>
         </div>
       </Card>
@@ -573,6 +685,111 @@ export default function Leads() {
                   placeholder="e.g. Acme Pvt Ltd"
                 />
               </div>
+              <div className="sm:col-span-2 border-t border-neutral-200 pt-4 dark:border-neutral-700">
+                <p className="mb-3 text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+                  Pipeline fields (optional — same as CSV headers)
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="form-label">Role</label>
+                    <input
+                      className="form-input"
+                      value={form.role_title}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, role_title: e.target.value }))
+                      }
+                      disabled={saving}
+                      placeholder="e.g. Founder"
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Agency type (SEO / Ads / Creative)</label>
+                    <input
+                      className="form-input"
+                      value={form.agency_type}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, agency_type: e.target.value }))
+                      }
+                      disabled={saving}
+                      placeholder="e.g. SEO"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="form-label">Profile link</label>
+                    <input
+                      className="form-input"
+                      value={form.profile_link}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, profile_link: e.target.value }))
+                      }
+                      disabled={saving}
+                      placeholder="https://linkedin.com/in/…"
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Team size (estimate)</label>
+                    <input
+                      className="form-input"
+                      value={form.team_size_estimate}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, team_size_estimate: e.target.value }))
+                      }
+                      disabled={saving}
+                      placeholder="e.g. 10–20"
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Replied (Y/N)</label>
+                    <input
+                      className="form-input"
+                      value={form.replied_y_n}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, replied_y_n: e.target.value }))
+                      }
+                      disabled={saving}
+                      placeholder="Y or N"
+                      maxLength={8}
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Last active</label>
+                    <input
+                      className="form-input"
+                      value={form.last_active_display}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, last_active_display: e.target.value }))
+                      }
+                      disabled={saving}
+                      placeholder="e.g. 2025-01-12"
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Connection sent (date)</label>
+                    <input
+                      className="form-input"
+                      value={form.connection_sent_date}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, connection_sent_date: e.target.value }))
+                      }
+                      disabled={saving}
+                      placeholder="e.g. 2025-01-08"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="form-label">Problem seen</label>
+                    <textarea
+                      className="form-input min-h-[72px] resize-y"
+                      rows={2}
+                      value={form.problem_seen}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, problem_seen: e.target.value }))
+                      }
+                      disabled={saving}
+                      placeholder="What they need or objected to"
+                    />
+                  </div>
+                </div>
+              </div>
               <div className="sm:col-span-2">
                 <label className="form-label">Last message / note (optional)</label>
                 <textarea
@@ -688,6 +905,95 @@ export default function Leads() {
                   }
                   placeholder="e.g. Acme Pvt Ltd"
                 />
+              </div>
+              <div className="sm:col-span-2 border-t border-neutral-200 pt-4 dark:border-neutral-700">
+                <p className="mb-3 text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+                  Pipeline fields (optional)
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="form-label">Role</label>
+                    <input
+                      className="form-input"
+                      value={editing.role_title || ""}
+                      onChange={(e) =>
+                        setEditing((x) => ({ ...x, role_title: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Agency type</label>
+                    <input
+                      className="form-input"
+                      value={editing.agency_type || ""}
+                      onChange={(e) =>
+                        setEditing((x) => ({ ...x, agency_type: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="form-label">Profile link</label>
+                    <input
+                      className="form-input"
+                      value={editing.profile_link || ""}
+                      onChange={(e) =>
+                        setEditing((x) => ({ ...x, profile_link: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Team size (estimate)</label>
+                    <input
+                      className="form-input"
+                      value={editing.team_size_estimate || ""}
+                      onChange={(e) =>
+                        setEditing((x) => ({ ...x, team_size_estimate: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Replied (Y/N)</label>
+                    <input
+                      className="form-input"
+                      value={editing.replied_y_n || ""}
+                      onChange={(e) =>
+                        setEditing((x) => ({ ...x, replied_y_n: e.target.value }))
+                      }
+                      maxLength={8}
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Last active</label>
+                    <input
+                      className="form-input"
+                      value={editing.last_active_display || ""}
+                      onChange={(e) =>
+                        setEditing((x) => ({ ...x, last_active_display: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Connection sent (date)</label>
+                    <input
+                      className="form-input"
+                      value={editing.connection_sent_date || ""}
+                      onChange={(e) =>
+                        setEditing((x) => ({ ...x, connection_sent_date: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="form-label">Problem seen</label>
+                    <textarea
+                      className="form-input min-h-[72px] resize-y"
+                      rows={2}
+                      value={editing.problem_seen || ""}
+                      onChange={(e) =>
+                        setEditing((x) => ({ ...x, problem_seen: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
               </div>
               <div className="sm:col-span-2">
                 <label className="form-label">Last message / note (optional)</label>

@@ -22,5 +22,12 @@ class User(Base):
     usage_email_limit_sent: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
     )
+    # Per-user dashboard "Manual replies & conversions" (not shared across the workspace).
+    dashboard_manual_replies: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    dashboard_manual_conversions: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
 
     workspace: Mapped["Workspace"] = relationship("Workspace", back_populates="users")

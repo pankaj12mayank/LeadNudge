@@ -34,6 +34,7 @@ def list_outbound_mails(
         page=page,
         limit=limit,
         search=q,
+        owner_user_id=principal.user_id,
     )
     items = [OutboundMailOut.model_validate(r) for r in rows]
     pages = max(1, ceil(total / limit)) if limit else 1

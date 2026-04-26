@@ -1,4 +1,7 @@
-/** Display labels for fixed system workspaces */
+/**
+ * Display labels for fixed system workspaces.
+ * @param {string} name - Workspace slug from API (`workspace.name`), not the whole row object.
+ */
 export function workspaceLabel(name) {
   if (name === "free_workspace") return "Free workspace";
   if (name === "pro_workspace") return "Pro workspace";

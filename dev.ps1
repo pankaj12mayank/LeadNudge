@@ -65,12 +65,13 @@ $BackendJob = Start-Job -ScriptBlock {
 
 $deadline = (Get-Date).AddSeconds(60)
 while (-not (Test-Path $portFile) -and (Get-Date) -lt $deadline) {
-    Receive-Job $BackendJob -Keep -ErrorAction SilentlyContinue | ForEach-Object { "[backend] $_" }
+    # Do not use -Keep: it re-returns all job output every poll (looks like an infinite restart loop).
+    Receive-Job $BackendJob -ErrorAction SilentlyContinue | ForEach-Object { "[backend] $_" }
     if ($BackendJob.State -in @("Completed", "Failed", "Stopped")) { break }
     Start-Sleep -Milliseconds 250
 }
 
-Receive-Job $BackendJob -Keep -ErrorAction SilentlyContinue | ForEach-Object { "[backend] $_" }
+Receive-Job $BackendJob -ErrorAction SilentlyContinue | ForEach-Object { "[backend] $_" }
 
 if (-not (Test-Path $portFile)) {
     Stop-Job $BackendJob -ErrorAction SilentlyContinue
@@ -86,8 +87,8 @@ $FrontendJob = Start-Job -ScriptBlock {
 
 try {
     while ($true) {
-        Receive-Job $BackendJob -Keep -ErrorAction SilentlyContinue | ForEach-Object { "[backend] $_" }
-        Receive-Job $FrontendJob -Keep -ErrorAction SilentlyContinue | ForEach-Object { "[frontend] $_" }
+        Receive-Job $BackendJob -ErrorAction SilentlyContinue | ForEach-Object { "[backend] $_" }
+        Receive-Job $FrontendJob -ErrorAction SilentlyContinue | ForEach-Object { "[frontend] $_" }
         $beDone = $BackendJob.State -in @("Completed", "Failed", "Stopped")
         $feDone = $FrontendJob.State -in @("Completed", "Failed", "Stopped")
         if ($beDone -and $feDone) { break }

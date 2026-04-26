@@ -68,7 +68,12 @@ def put_settings(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid session",
             )
-        update_user_settings(db, principal.workspace_id, body)
+        update_user_settings(
+            db,
+            principal.workspace_id,
+            body,
+            for_user_id=principal.user_id,
+        )
         return get_settings_out(
             db,
             principal.workspace_id,

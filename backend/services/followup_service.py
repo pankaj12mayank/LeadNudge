@@ -177,6 +177,11 @@ def _conversation_context_for_lead(
 ) -> str | None:
     lead = db.get(Lead, lead_id)
     chunks: list[str] = []
+    if lead and getattr(lead, "problem_seen", None) and str(lead.problem_seen).strip():
+        ps = str(lead.problem_seen).strip()
+        chunks.append(
+            "Problem / opportunity noted (context only):\n" + ps[:2000]
+        )
     if lead and (lead.last_message or "").strip():
         note = lead.last_message.strip()
         chunks.append(
@@ -490,9 +495,15 @@ def _process_one_due_followup(db: Session, fu: Followup) -> None:
                 lead, content, settings
             )
             email_service.send_followup_email(settings, lead, subj, body_plain)
+            _owner = (
+                int(lead.owner_user_id)
+                if lead.owner_user_id is not None
+                else (int(sid) if sid is not None else None)
+            )
             db.add(
                 OutboundEmail(
                     workspace_id=ws_id,
+                    owner_user_id=_owner,
                     followup_id=fu.id,
                     lead_id=lead.id,
                     to_email=(lead.email or "").strip(),

@@ -1,6 +1,6 @@
 # Client setup guide
 
-Install and run **AI Sales Agent** on a new machine. Windows steps are primary; Linux/macOS use the same commands with `source` instead of `Scripts\activate`.
+Install and run **LeadNudge** on a new machine. Windows steps are primary; Linux/macOS use the same commands with `source` instead of `Scripts\activate`.
 
 **Related docs**
 
@@ -46,7 +46,7 @@ End clients **do not** use this install guide — browser only.
 
 ## 2. Get the project
 
-Clone or copy the **`ai-sales-agent`** folder onto the machine.
+Clone or copy the **LeadNudge** project folder onto the machine. On Windows, **`start.bat`** in the repo root can create **`backend/.env`** from **`backend/.env.example`**, install dependencies, and start backend + frontend in one step.
 
 ---
 
@@ -55,7 +55,7 @@ Clone or copy the **`ai-sales-agent`** folder onto the machine.
 ### Windows (PowerShell or CMD)
 
 ```powershell
-cd path\to\ai-sales-agent\backend
+cd path\to\LeadNudge\backend
 python -m venv ..\.venv
 ..\.venv\Scripts\activate
 pip install -U pip
@@ -66,7 +66,7 @@ copy .env.example .env
 ### Linux / macOS
 
 ```bash
-cd /path/to/ai-sales-agent/backend
+cd /path/to/LeadNudge/backend
 python3 -m venv ../.venv
 source ../.venv/bin/activate
 pip install -U pip
@@ -95,7 +95,7 @@ cp .env.example .env
 ### Windows
 
 ```powershell
-cd path\to\ai-sales-agent\frontend
+cd path\to\LeadNudge\frontend
 npm install
 copy .env.example .env
 ```
@@ -103,7 +103,7 @@ copy .env.example .env
 ### Linux / macOS
 
 ```bash
-cd /path/to/ai-sales-agent/frontend
+cd /path/to/LeadNudge/frontend
 npm install
 cp .env.example .env
 ```
@@ -189,7 +189,7 @@ Use this after local setup works. Goal: **HTTPS**, stable API, static UI.
 
 ### 8.2 Deploy steps (summary)
 
-1. Clone repo to e.g. `/opt/ai-sales-agent`.
+1. Clone repo to e.g. `/opt/LeadNudge`.
 2. Create venv, `pip install -r backend/requirements.txt`.
 3. Configure **`backend/.env`** (production `SECRET_KEY`, `CORS_ORIGINS`, `DATABASE_URL`, `OLLAMA_URL`, etc.).
 4. On build machine or CI: `npm ci && VITE_API_URL=https://api.yourdomain.com npm run build` → deploy **`dist/`** to the web root.
