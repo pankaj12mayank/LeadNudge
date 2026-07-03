@@ -27,7 +27,7 @@ Details: [`CLIENT_SETUP.md`](./CLIENT_SETUP.md) (B2B + cheap hosting plan) and [
 - **Users:** leads, follow-ups, outbound mail history, email (workspace) settings, profile & password.
 - **AI:** Free workspaces always use **Ollama**. **Pro** workspaces may use **OpenAI** when server `MODE=api`, workspace AI mode is **API**, and a workspace or global API key is set.
 - **Security / ops:** JWT auth, admin cannot delete or deactivate their own matching workspace user, deactivated users get **403** on session check (forced logout in UI), transactional email logging (success/failure) and **system_logs** fallback on SMTP errors.
-- **One-click Windows start:** [`start.bat`](./start.bat) — backend, frontend, browser, Ollama check.
+- **One-command start:** [`run.ps1`](./run.ps1) — installs deps, starts backend + frontend.
 
 ### Sales automation (workspace user portal)
 
@@ -37,14 +37,29 @@ Details: [`CLIENT_SETUP.md`](./CLIENT_SETUP.md) (B2B + cheap hosting plan) and [
 - **Missed-lead recovery:** a **daily** job queues **recovery** follow-ups for leads with **no activity for 3–7 whole days** (no pending follow-up, not closed / not interested, at most one recovery send per 7 days). Processed with normal pending follow-up handling.
 - **Sales dashboard (`/dashboard`):** `GET /dashboard/summary` — totals, **follow-ups sent** (in date range), **manual replies** and **manual conversions** (editable under **Workspace settings** via the dashboard form), **recent leads** and **recent follow-ups**, with optional filters **date range** (on lead `created_at`) and **status**.
 
-## Quick start (Windows)
+## Quick start
 
-1. **Backend:** Python 3.11+, create a venv, `pip install -r backend/requirements.txt`, copy `backend/.env.example` → `backend/.env`, set `BOOTSTRAP_ADMIN_*` and `SECRET_KEY`.
-2. **Frontend:** Node 18+, `npm install` in `frontend/`, copy `frontend/.env.example` → `frontend/.env` (optional for dev proxy; see file comments).
-3. **Ollama:** install and `ollama pull` a model (match `OLLAMA_MODEL` in `backend/.env`, e.g. `llama3.2:latest`).
-4. From repo root: run **`start.bat`**.
+1. **Python 3.11+** & **Node 18+** install karein.
+2. `backend/.env.example` copy karein → `backend/.env`, usme `SECRET_KEY` aur `BOOTSTRAP_ADMIN_*` set karein.
+3. **Ollama** install karein aur model pull karein: `ollama pull llama3.2`.
+4. Repo root me terminal kholke run karein:
 
-See [`SIMPLE_START.md`](./SIMPLE_START.md) and [`CLIENT_SETUP.md`](./CLIENT_SETUP.md) for step-by-step commands (including **Linux/macOS** and **server** deploy).
+```powershell
+.\run.ps1
+```
+
+Ye ek baar me venv create karega, pip install karega, npm install karega, aur backend + frontend start karega.
+
+**Manual bhi kar sakte hain:**
+```powershell
+# Terminal 1 — Backend
+.\.venv\Scripts\python.exe backend\run_dev.py
+
+# Terminal 2 — Frontend
+cd frontend; npm run dev
+```
+
+Browser me `http://localhost:5173` open karein.
 
 ## Configuration
 
@@ -56,7 +71,7 @@ See [`SIMPLE_START.md`](./SIMPLE_START.md) and [`CLIENT_SETUP.md`](./CLIENT_SETU
 | UI (dev) | `5173` | `frontend/.env`: `VITE_DEV_PORT` |
 | Ollama | `11434` | Ollama app / `OLLAMA_URL` or `OLLAMA_BASE_URL` in `backend/.env` |
 
-Repo root **`ports.env`** (optional) can override `BACKEND_PORT` for `start.bat` / `run_prod.py`.
+Repo root **`ports.env`** (optional) can override `BACKEND_PORT` for `run.ps1` / `run_prod.py`.
 
 ### Backend (`backend/.env`)
 
@@ -126,8 +141,9 @@ Failures are logged under **EMAIL** in system logs and sent-mail log where appli
 
 ### Local / LAN
 
-- Backend: `python backend/run_dev.py` (reload) or `python backend/run_prod.py` (no reload, port file; repo-root `.backend-port` when `BACKEND_PORT=0`).
-- Frontend dev: `npm run dev` in `frontend/`.
+- Run all: `.\run.ps1` (repo root) — ek command me backend + frontend.
+- Backend only: `.venv\Scripts\python.exe backend\run_dev.py` (reload) or `backend\run_prod.py` (no reload).
+- Frontend only: `cd frontend; npm run dev`.
 - Production UI: `npm run build` with `VITE_API_URL=https://your-api-origin` and serve `frontend/dist` with any static host; ensure `CORS_ORIGINS` on the API includes your UI origin.
 
 ### Cheapest domain + host plan (B2B friendly)
@@ -151,15 +167,16 @@ Always set strong `SECRET_KEY`, HTTPS in production, and restrict `CORS_ORIGINS`
 
 ## Non-technical setup
 
-See **[`SIMPLE_START.md`](./SIMPLE_START.md)** (install Python, Node, Ollama → run `start.bat`).
+See **[`SIMPLE_START.md`](./SIMPLE_START.md)** (install Python, Node, Ollama → run `.\run.ps1`).
 
 ## Project layout
 
 ```text
 LeadNudge/
 ├── backend/                    # FastAPI, SQLAlchemy, agents; requirements.txt
-├── frontend/                 # React + Vite + Tailwind
-├── start.bat                   # Windows: backend + frontend + browser + Ollama check
+├── frontend/                   # React + Vite + Tailwind
+├── requirements.txt            # Root Python deps (backend)
+├── run.ps1                     # Ek command: install + start backend + frontend
 ├── CLIENT_SETUP.md             # Detailed setup (local + server)
 ├── SIMPLE_START.md             # Quick local vs hosting paths
 ├── CI_CD_DEPLOYMENT_GUIDE.md   # Production deploy & CI/CD from zero
@@ -168,7 +185,7 @@ LeadNudge/
 
 ## Dependencies
 
-- **Backend:** `backend/requirements.txt` (Python 3.11+). Optional **Postgres:** uncomment `psycopg2-binary` there when using `postgresql://` / `postgresql+psycopg2://` in `DATABASE_URL`.
+- **Backend:** `requirements.txt` (root, Python 3.11+). Optional **Postgres:** uncomment `psycopg2-binary` there when using `postgresql://` / `postgresql+psycopg2://` in `DATABASE_URL`.
 - **Frontend:** `frontend/package.json` + `package-lock.json` — use `npm ci` in CI when lockfile is present.
 
 ## Testing
